@@ -176,8 +176,8 @@ app.post('/api/jobs/:id/compress', action((job, b) => J.startCompress(job, Numbe
 app.post('/api/jobs/:id/auto', action((job, b) => J.startAutoFlow(job, { from: b.from ?? null })));
 
 // ---------- Chrome Flow (tự động hoàn toàn) ----------
-app.get('/api/flow/status', wrap(async (_req, res) => res.json({ up: await FC.isUp(), source: FC.source(), profiles: FC.listProfiles(), port: FC.CDP_PORT })));
-app.post('/api/flow/sync', wrap(async (req, res) => { const s = await FC.syncProfile(String(req.body?.dir || '')); await FC.ensure({ show: true }); res.json(s); }));
+app.get('/api/flow/status', wrap(async (_req, res) => res.json(await FC.status())));
+app.post('/api/flow/sync', wrap(async (req, res) => { const s = await FC.syncProfile(String(req.body?.dir || '')); await FC.ensure({ show: true }); const login = await FC.checkLogin().catch(() => null); res.json({ ...s, login }); }));
 app.post('/api/flow/show', wrap(async (req, res) => { await FC.ensure({ show: req.body?.show !== false }); res.json({ ok: true }); }));
 app.post('/api/flow/check', wrap(async (_req, res) => res.json(await FC.checkLogin())));
 app.post('/api/flow/close', wrap(async (_req, res) => { await FC.close(); res.json({ ok: true }); }));
@@ -194,7 +194,14 @@ app.post('/api/fbchrome/pages', wrap(async (_req, res) => {
   res.json({ pages: r.pages, page: FBB.browserPage() });
 }));
 app.post('/api/fbchrome/page', wrap(async (req, res) => res.json(await FBB.selectPage(String(req.body?.name || '')))));
-app.post('/api/fbchrome/sync', wrap(async (req, res) => { const s = await FBC.syncProfile(String(req.body?.dir || '')); await FBC.ensure({ show: true }); res.json(s); }));
+app.post('/api/fbchrome/sync', wrap(async (req, res) => {
+  const s = await FBC.syncProfile(String(req.body?.dir || ''));
+  await FBC.ensure({ show: true });
+  const id = fbSelectedPageId();
+  const r = await FBB.checkLogin(id).catch(() => null);
+  const login = r ? { ...r, page: r.ok && id ? FBB.browserPage()?.name || id : null } : null;
+  res.json({ ...s, login });
+}));
 app.post('/api/fbchrome/show', wrap(async (req, res) => { await FBC.ensure({ show: req.body?.show !== false }); res.json({ ok: true }); }));
 app.post('/api/fbchrome/check', wrap(async (_req, res) => {
   const id = fbSelectedPageId();

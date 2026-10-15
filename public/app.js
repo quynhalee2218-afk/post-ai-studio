@@ -124,20 +124,28 @@ function stopPoll() { clearTimeout(pollTimer); pollTimer = null; }
 async function refresh(force = false) {
   stopPoll();
   if (!currentId) return;
+  let nextMs = 5000;
   try {
     const job = await api(`/api/jobs/${currentId}`);
-    const editing = document.activeElement?.matches?.('#view-job textarea, #view-job input');
-    if (force || !editing) {
+    nextMs = job.busy ? 2500 : 6000;
+    const editing = document.activeElement?.matches?.('#view-job textarea, #view-job input[type="text"], #view-job input[type="number"], #view-job input[type="datetime-local"], #view-job select, #view-job input:not([type])');
+    const majorChange = !currentJob
+      || job.stage !== currentJob.stage
+      || Boolean(job.busy) !== Boolean(currentJob.busy)
+      || job.final?.file !== currentJob.final?.file
+      || job.scenes.filter((s) => s.clip).length !== currentJob.scenes.filter((s) => s.clip).length;
+    if (force || majorChange || !editing) {
       if (force || !currentJob || job.updatedAt !== currentJob.updatedAt) {
         const wasBusy = currentJob?.busy;
         currentJob = job;
         renderJob(job);
-        if (wasBusy && !job.busy) loadList();
+        if (wasBusy !== job.busy) loadList();
       }
     }
-    pollTimer = setTimeout(refresh, job.busy ? 2500 : 8000);
   } catch (e) {
-    toast(e.message);
+    nextMs = 4000;
+  } finally {
+    if (currentId) pollTimer = setTimeout(refresh, nextMs);
   }
 }
 
@@ -263,6 +271,9 @@ function renderJob(job) {
   }).join('');
 
   const allClips = job.scenes.every((s) => s.clip);
+  const prevMode = $('#fb-mode')?.value || 'schedule';
+  const prevWhenEl = $('#fb-when');
+  const prevWhenVal = prevWhenEl?.value && (new Date(prevWhenEl.value).getTime() >= Date.now() + 28 * 60 * 1000) ? prevWhenEl.value : defaultWhen();
   const final = `
     <div class="card">
       <h2>Ghép video & đăng Facebook</h2>
@@ -288,11 +299,11 @@ function renderJob(job) {
           </label>
           <div class="row" style="align-items:center">
             <select id="fb-mode" style="width:auto">
-              <option value="schedule" selected>Hẹn giờ đăng</option>
-              <option value="publish">Đăng ngay (công khai)</option>
-              <option value="draft">Lưu nháp</option>
+              <option value="schedule" ${prevMode === 'schedule' ? 'selected' : ''}>Hẹn giờ đăng</option>
+              <option value="publish" ${prevMode === 'publish' ? 'selected' : ''}>Đăng ngay (công khai)</option>
+              <option value="draft" ${prevMode === 'draft' ? 'selected' : ''}>Lưu nháp</option>
             </select>
-            <input type="datetime-local" id="fb-when" style="width:auto" value="${defaultWhen()}">
+            <input type="datetime-local" id="fb-when" style="width:auto" value="${prevWhenVal}">
             <button data-act="facebook" class="primary" ${busy || !job.final || !cfg.fbReady ? 'disabled' : ''}>Đăng lên ${esc(fbc.page?.name || 'Page')}</button>
           </div>
           ${!cfg.fbReady ? '<div class="muted">Chưa sẵn sàng đăng — tab <a href="#" data-goto-accounts>Tài khoản</a> → Chrome Facebook: chép profile, đăng nhập Facebook và chọn <b>Page để đăng</b>.</div>' : ''}
@@ -447,10 +458,9 @@ function toLocalInput(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function defaultWhen() {
-  // Mặc định: giờ tròn kế tiếp, ít nhất 1 tiếng nữa.
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  d.setMinutes(0, 0, 0);
-  d.setHours(d.getHours() + 1);
+  // Mặc định: sau hiện tại khoảng 30 phút để khớp với Meta Business Suite.
+  const d = new Date(Date.now() + 31 * 60 * 1000);
+  d.setSeconds(0, 0);
   return toLocalInput(d);
 }
 
@@ -510,7 +520,7 @@ function renderPosts(posts) {
       <div class="acts">
         ${editable ? `<input type="datetime-local" value="${when ? toLocalInput(when) : defaultWhen()}" data-when>
           <button class="small" data-post-act="reschedule">${p.state === 'draft' ? 'Hẹn giờ' : 'Đổi giờ'}</button>
-          <button class="small" data-post-act="soon">Đăng sớm (sau ~11 phút)</button>
+          <button class="small" data-post-act="soon">Đăng sớm (sau ~30 phút)</button>
           <button class="small danger" data-post-act="cancel">Huỷ / xoá khỏi Facebook</button>` : ''}
         <button class="small" data-post-act="sync">Kiểm tra trạng thái</button>
         ${postLinks(p)}
@@ -546,8 +556,11 @@ function setFbc(st) {
 function setFlowPill(st) {
   const pill = $('#pill-flow');
   if (!pill) return;
-  pill.className = `pill ${st?.source ? 'ok' : 'bad'}`;
-  pill.textContent = st?.source ? `Flow: ${st.source.email || st.source.name}` : 'Flow chưa sẵn sàng';
+  const ok = Boolean(st?.loggedIn);
+  pill.className = `pill ${ok ? 'ok' : 'bad'}`;
+  pill.textContent = ok
+    ? `Flow: ${st.source?.email || st.source?.name || 'đã đăng nhập'}`
+    : st?.source ? `Flow: chờ đăng nhập (${st.source.email || st.source.name})` : 'Flow chưa sẵn sàng';
 }
 async function loadChromeStatus() {
   const [f, b] = await Promise.all([api('/api/flow/status').catch(() => null), api('/api/fbchrome/status').catch(() => null)]);
@@ -558,8 +571,8 @@ async function loadChromeStatus() {
 // Hộp quản lý "Chrome riêng" (chép profile, hiện/ẩn, kiểm tra đăng nhập) — dùng cho Chrome Flow và Chrome Facebook.
 const CHROMES = {
   flow: { box: '#chromeflow-box', api: '/api/flow', name: 'Chrome Flow', site: 'Flow', checkLabel: 'Kiểm tra đăng nhập Flow',
-    ok: (r) => `✓ Chrome Flow vào được Flow${r.email ? ` bằng <b>${esc(r.email)}</b>` : ''}. Sẵn sàng tự động.`,
-    bad: (r) => `Chưa vào được Flow (đang ở ${esc(r.url)}). Bấm <b>Hiện cửa sổ</b> và đăng nhập Google/Flow trong cửa sổ Chrome Flow, rồi kiểm tra lại.` },
+    ok: (r) => `✓ Chrome Flow đã vào được Google Flow${r.email ? ` bằng <b>${esc(r.email)}</b>` : ''}. Sẵn sàng tự động tạo video!`,
+    bad: (r) => `Cửa sổ <b>Chrome Flow</b> đã bật lên trên màn hình ở trang đăng nhập Google — hãy nhập mật khẩu <b>1 lần duy nhất</b> trong cửa sổ đó rồi bấm lại <b>Kiểm tra đăng nhập Flow</b>.` },
   fb: { box: '#chromefb-box', api: '/api/fbchrome', name: 'Chrome Facebook', site: 'Facebook', checkLabel: 'Kiểm tra đăng nhập Facebook',
     ok: (r) => `✓ Chrome Facebook đã đăng nhập${r.name ? ` (<b>${esc(r.name)}</b>)` : ''}${r.page ? ` và mở được Business Suite của Page <b>${esc(r.page)}</b>` : ''}. Sẵn sàng đăng.`,
     bad: (r) => `${esc(r.reason || 'Chưa đăng nhập Facebook')}. Bấm <b>Hiện cửa sổ</b>, tự đăng nhập Facebook (tài khoản quản trị Page) trong cửa sổ Chrome Facebook, rồi kiểm tra lại.`,
@@ -582,17 +595,25 @@ async function loadChromeBox(kind, extra = '') {
   let st;
   try { st = await api(`${c.api}/status`); } catch (e) { box.textContent = e.message; return; }
   const src = st.source;
+  const statusLine = kind === 'flow'
+    ? (st.loggedIn
+      ? `<b style="color:var(--ok)">✓ Đã đăng nhập Google Flow</b>`
+      : st.up ? `<b style="color:#d97706">đang mở — chờ bạn đăng nhập Google trong cửa sổ Chrome Flow</b>` : `<b style="color:var(--muted)">chưa mở</b>`)
+    : `<b style="color:${st.up ? 'var(--ok)' : 'var(--muted)'}">${st.up ? 'đang chạy' : 'chưa mở'}</b>`;
+  const autoWarn = kind === 'flow' && st.up && !st.loggedIn && !extra
+    ? `<div class="error-box" style="margin:0">Cửa sổ <b>Chrome Flow</b> riêng đã mở trên màn hình ở trang <b>Đăng nhập - Tài khoản Google</b> (điền sẵn <b>${esc(src?.email || '')}</b>). Hãy nhập mật khẩu <b>1 lần duy nhất</b> trong cửa sổ đó rồi bấm <b>Kiểm tra đăng nhập Flow</b>.</div>`
+    : '';
   box.innerHTML = `
-    <div>Trạng thái: <b style="color:${st.up ? 'var(--ok)' : 'var(--muted)'}">${st.up ? 'đang chạy' : 'chưa mở'}</b>${src ? ` · profile đã chép: <b>${esc(src.name)}</b>${src.email ? ` (${esc(src.email)})` : ''} · ${new Date(src.syncedAt).toLocaleString('vi-VN')}` : ' · chưa chép profile'}</div>
+    <div>Trạng thái: ${statusLine}${src ? ` · tài khoản: <b>${esc(src.name)}</b>${src.email ? ` (${esc(src.email)})` : ''}` : ' · chưa chọn tài khoản'}</div>
     <div class="row" style="margin-top:0">
       <select data-cb="profile" style="width:auto;max-width:100%">${st.profiles.map((p) => `<option value="${esc(p.dir)}" ${src?.dir === p.dir ? 'selected' : ''}>${esc(p.name)}${p.email ? ` — ${esc(p.email)}` : ''}</option>`).join('')}</select>
-      <button class="small primary" data-cb="sync">${src ? 'Chép lại & mở' : 'Chép profile & mở'}</button>
+      <button class="small primary" data-cb="sync">${src ? 'Chọn & mở' : 'Chọn profile & mở'}</button>
     </div>
     ${src ? `<div class="row" style="margin-top:0">
       <button class="small" data-cb="show">Hiện cửa sổ</button><button class="small" data-cb="hide">Ẩn sang mép</button>
       <button class="small" data-cb="check">${c.checkLabel}</button>${st.up ? '<button class="small danger" data-cb="close">Tắt</button>' : ''}</div>` : ''}
     ${c.extra ? c.extra(st) : ''}
-    ${extra}`;
+    ${extra || autoWarn}`;
   if (kind === 'fb') setFbc(st); else setFlowPill(st);
 }
 const loadChromeFlow = (extra) => loadChromeBox('flow', extra);
@@ -618,10 +639,12 @@ for (const [kind, c] of Object.entries(CHROMES)) {
     b.disabled = true;
     try {
       if (act === 'sync') {
-        if (!confirm(`Chép profile Chrome đã chọn sang ${c.name} (ghi đè bản cũ) rồi mở cửa sổ ${c.name}?`)) return;
-        b.textContent = 'Đang chép…';
+        b.textContent = 'Đang mở…';
         const r = await api(`${c.api}/sync`, { method: 'POST', body: { dir: box.querySelector('[data-cb=profile]').value } });
-        return loadChromeBox(kind, `<div class="dialogue" style="margin:0">Đã chép <b>${esc(r.name)}</b> và mở ${c.name}. Bấm <b>${c.checkLabel}</b>; nếu chưa vào được thì đăng nhập trong cửa sổ đó.</div>`);
+        const msg = r.login?.ok
+          ? `<div class="dialogue" style="margin:0;color:#047857">${c.ok(r.login)}</div>`
+          : `<div class="error-box" style="margin:0">${c.bad(r.login || { url: '' })}</div>`;
+        return loadChromeBox(kind, msg);
       }
       if (act === 'show' || act === 'hide') { await api(`${c.api}/show`, { method: 'POST', body: { show: act === 'show' } }); return loadChromeBox(kind); }
       if (act === 'close') { await api(`${c.api}/close`, { method: 'POST' }); return loadChromeBox(kind); }
@@ -666,7 +689,7 @@ $('#posts-list').addEventListener('click', async (e) => {
   try {
     b.disabled = true;
     if (act === 'reschedule' || act === 'soon') {
-      const t = act === 'soon' ? new Date(Date.now() + 11.5 * 60 * 1000) : new Date(card.querySelector('[data-when]').value);
+      const t = act === 'soon' ? new Date(Date.now() + 31 * 60 * 1000) : new Date(card.querySelector('[data-when]').value);
       if (Number.isNaN(t.getTime())) throw new Error('Chọn ngày giờ');
       if (!confirm(`${act === 'soon' ? 'Đăng sớm' : 'Hẹn đăng'} lúc ${t.toLocaleString('vi-VN')}? Tới giờ Facebook sẽ TỰ ĐĂNG công khai.`)) return;
       await api(`/api/posts/${id}/reschedule`, { method: 'POST', body: { at: Math.floor(t.getTime() / 1000) } });
