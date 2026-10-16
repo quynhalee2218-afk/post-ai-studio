@@ -51,11 +51,15 @@ const STAGE = {
 // ---------- danh sách ----------
 async function loadList() {
   const jobs = await api('/api/jobs');
-  $('#job-list').innerHTML = jobs.map((j) => `
+  $('#job-list').innerHTML = jobs.map((j) => {
+    const isViral = j.videoType === 'viral';
+    const typeBadge = `<span class="badge ${isViral ? 'viral-pill' : 'ads-pill'}" style="font-size:10px;padding:1px 6px;margin-right:4px;vertical-align:middle">${isViral ? '🔥 Viral' : '🛍️ Ads'}</span>`;
+    return `
     <li data-id="${j.id}" class="${j.id === currentId ? 'active' : ''} ${j.busy ? 'st-busy' : ({ posted: 'st-done', posted_draft: 'st-done', scheduled: 'st-scheduled', stitched: 'st-done' }[j.stage] || '')}">
-      ${esc(j.topic.slice(0, 60))}
+      ${typeBadge}${esc(j.topic.slice(0, 56))}
       <div class="meta">${j.sceneCount} cảnh · ${esc(STAGE[j.stage] || j.stage)}${j.busy ? ' · ⏳' : ''}</div>
-    </li>`).join('') || '<li class="muted">Chưa có video nào</li>';
+    </li>`;
+  }).join('') || '<li class="muted">Chưa có video nào</li>';
   sideJobs = jobs;
   sideLabel();
 }
@@ -71,12 +75,235 @@ $('#job-list').addEventListener('click', (e) => {
   if (li) openJob(li.dataset.id);
 });
 
-// ---------- tạo mới ----------
+// ---------- tạo mới & chọn loại video (Quảng Cáo Sản Phẩm vs Viral Kéo Traffic Hàng Ngày) ----------
+let currentVideoType = 'ads';
+let lastViralTopics = [];
+
+function updateViralSelectHints() {
+  const fmtVal = $('#viral-format-select')?.value;
+  const fmtObj = (cfg.viralFormats || []).find((f) => f.id === fmtVal) || (cfg.viralFormats || [])[0];
+  if ($('#viral-format-desc') && fmtObj) $('#viral-format-desc').textContent = fmtObj.desc || '';
+
+  const goalVal = $('#traffic-goal-select')?.value;
+  const goalObj = (cfg.trafficGoals || []).find((g) => g.id === goalVal) || (cfg.trafficGoals || [])[0];
+  if ($('#traffic-goal-desc') && goalObj) $('#traffic-goal-desc').textContent = goalObj.defaultCta || '';
+}
+
+function setNewVideoMode(mode) {
+  currentVideoType = mode === 'viral' ? 'viral' : 'ads';
+  const vtInput = $('#new-videotype-input');
+  if (vtInput) vtInput.value = currentVideoType;
+
+  for (const card of document.querySelectorAll('#video-type-cards .mode-card')) {
+    card.classList.toggle('active', card.dataset.vtype === currentVideoType);
+  }
+  const isViral = currentVideoType === 'viral';
+  const viralBox = $('#viral-config-box');
+  if (viralBox) viralBox.hidden = !isViral;
+
+  if ($('#new-eyebrow')) {
+    $('#new-eyebrow').textContent = isViral
+      ? '🔥 Video Viral Hàng Ngày · Kéo Traffic & Tiếp cận khách hàng Fanpage'
+      : '🛍️ AI viết kịch bản · Video Quảng Cáo Sản Phẩm & Dịch Vụ';
+  }
+  if ($('#new-title')) {
+    $('#new-title').textContent = isViral
+      ? 'Làm Video Viral Kéo Traffic Cho Fanpage'
+      : 'Làm Video Quảng Cáo Sản Phẩm Mới';
+  }
+  if ($('#new-desc')) {
+    $('#new-desc').innerHTML = isViral
+      ? 'Xây dựng kịch bản & video Reels đăng bài hàng ngày theo công thức <b>Kể chuyện đời thường / Bóc sự thật / Bí kíp / Đạo lý</b> giúp giữ chân người lạ xem hết 100%, kích thích Bình luận & Chia sẻ để kéo khách hàng tiềm năng về Fanpage tự nhiên.'
+      : 'Claude đọc hiểu kiến thức từ kho Skill AI bạn chọn (kèm chuẩn kỹ thuật Video AI) để trích xuất USP sản phẩm, đánh trúng nỗi đau khách hàng và viết kịch bản chuyển đổi.';
+  }
+  if ($('#lbl-topic')) {
+    $('#lbl-topic').textContent = isViral
+      ? 'Chủ đề / Tình huống / Câu chuyện Viral hôm nay *'
+      : 'Chủ đề / sản phẩm / dịch vụ *';
+  }
+  if ($('#inp-topic')) {
+    $('#inp-topic').placeholder = isViral
+      ? 'VD: Câu chuyện 30 tuổi mới nhận ra sai lầm khi thức khuya làm việc / 3 dấu hiệu cơ thể cảnh báo nóng trong mà 90% chị em bỏ qua / Hoặc bấm nút "🔥 AI Gợi ý 8 Chủ đề Viral hôm nay" ở trên để chọn 1 chạm!'
+      : 'VD: Chị Giang pha trà dưỡng nhan An Nhiên buổi sáng / Hoạt hình 3D yến mạch cho bé / Khóa học AI cho chủ doanh nghiệp... (Agent sẽ tự nhận biết Skill tương ứng)';
+  }
+  if ($('#lbl-audience')) {
+    $('#lbl-audience').textContent = isViral
+      ? 'Tệp khách hàng tiềm năng muốn tiếp cận & kéo về Fanpage'
+      : 'Đối tượng xem';
+  }
+  if ($('#inp-audience')) {
+    $('#inp-audience').placeholder = isViral
+      ? 'VD: Phụ nữ 25–45 tuổi quan tâm sức khỏe, làm đẹp, gia đình / Chủ shop kinh doanh...'
+      : 'VD: chủ shop online 25–40 tuổi';
+  }
+  if ($('#lbl-cta')) {
+    $('#lbl-cta').textContent = isViral
+      ? 'Câu hỏi mở kéo Bình luận / Lời nhắn cuối video (CTA tương tác)'
+      : 'CTA (Lời kêu gọi mua hàng / hành động)';
+  }
+  if ($('#inp-cta')) {
+    $('#inp-cta').placeholder = isViral
+      ? 'VD: Còn bạn thì sao, bạn đã từng gặp tình huống này chưa? Bình luận bên dưới nhé!'
+      : 'VD: comment "AI" để nhận lịch học';
+  }
+  if ($('#hint-cta')) {
+    $('#hint-cta').textContent = isViral
+      ? 'Để trống = AI tự động tạo câu hỏi mở kích thích tranh luận / chia sẻ theo đúng "Mục tiêu kéo Traffic" bạn chọn ở trên.'
+      : 'Để trống = video không có lời kêu gọi hành động.';
+  }
+  if ($('#lbl-mustsay')) {
+    $('#lbl-mustsay').textContent = isViral
+      ? 'Thông điệp cốt lõi / Điểm chạm thương hiệu muốn lồng ghép khéo léo (tuỳ chọn)'
+      : 'Thông tin bắt buộc phải nói';
+  }
+  if ($('#inp-mustsay')) {
+    $('#inp-mustsay').placeholder = isViral
+      ? 'VD: Lồng ghép nhẹ nhàng thói quen uống trà thảo mộc buổi sáng (không nói giá, không chào hàng lộ liễu)'
+      : 'VD: học 4 tuần, học phí 2 triệu';
+  }
+  if ($('#btn-submit-new')) {
+    $('#btn-submit-new').textContent = isViral
+      ? '🔥 Viết kịch bản Video Viral Kéo Traffic'
+      : '🛍️ Viết kịch bản Video Quảng Cáo';
+    $('#btn-submit-new').className = isViral ? 'viral-btn' : 'primary';
+  }
+  updateViralSelectHints();
+  if (typeof scheduleDetectNewSkills === 'function') scheduleDetectNewSkills();
+}
+
 $('#btn-new').addEventListener('click', () => {
   currentId = null;
   stopPoll();
   loadList();
+  setNewVideoMode('ads');
   show('new');
+});
+
+$('#btn-new-viral')?.addEventListener('click', () => {
+  currentId = null;
+  stopPoll();
+  loadList();
+  setNewVideoMode('viral');
+  show('new');
+});
+
+$('#video-type-cards')?.addEventListener('click', (e) => {
+  const card = e.target.closest('.mode-card[data-vtype]');
+  if (!card) return;
+  setNewVideoMode(card.dataset.vtype);
+});
+
+$('#viral-format-select')?.addEventListener('change', () => {
+  updateViralSelectHints();
+  if (typeof scheduleDetectNewSkills === 'function') scheduleDetectNewSkills();
+});
+$('#traffic-goal-select')?.addEventListener('change', updateViralSelectHints);
+
+// Nút 🔥 AI Gợi ý 8 Chủ đề Viral hôm nay
+$('#btn-viral-suggest')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const niche = ($('#viral-niche-input')?.value || $('#inp-topic')?.value || '').trim();
+  const audience = ($('#inp-audience')?.value || '').trim();
+  const character = ($('#form-new [name=character]')?.value || '').trim();
+  const viralFormat = $('#viral-format-select')?.value || 'storytelling';
+  const trafficGoal = $('#traffic-goal-select')?.value || 'engage_comment';
+  const pinnedIds = skillsList.filter((s) => s.pinned && !s.builtin).map((s) => s.id);
+  const skillIds = [...new Set([...newSelectedSkills, ...pinnedIds])];
+  const autoDetect = $('#new-auto-skill')?.checked !== false;
+
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ AI đang lên 8 chủ đề Viral…';
+  const box = $('#viral-topics-result');
+  if (box) {
+    box.hidden = false;
+    box.innerHTML = `<div class="card muted" style="grid-column:1/-1;margin:0;text-align:center;padding:18px"><span class="busy"><span class="spin"></span>AI đang phân tích ngách Fanpage, tệp khách hàng & kho Skill để tạo 8 ý tưởng Video Viral kéo Traffic hôm nay (khoảng 15–30s)…</span></div>`;
+  }
+  try {
+    const r = await api('/api/viral/topics', {
+      method: 'POST',
+      body: { niche, audience, character, viralFormat, trafficGoal, skillIds, autoDetect },
+    });
+    lastViralTopics = r.topics || [];
+    if (Array.isArray(r.selectedIds) && r.selectedIds.length) {
+      for (const sid of r.selectedIds) {
+        if (!newSelectedSkills.includes(sid)) newSelectedSkills.push(sid);
+      }
+      syncNewSkillsInput();
+      populateSkillSelects();
+    }
+    if (!lastViralTopics.length) {
+      if (box) box.innerHTML = '<div class="muted" style="grid-column:1/-1">Chưa tạo được chủ đề, vui lòng thử lại.</div>';
+      return;
+    }
+    if (box) {
+      box.hidden = false;
+      box.innerHTML = lastViralTopics.map((t, idx) => `
+        <div class="viral-topic-card" data-viral-idx="${idx}">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px">
+              <span class="badge viral-pill">${esc(t.groupLabel || t.viralFormat)}</span>
+              <small class="muted">Ý tưởng #${idx + 1}</small>
+            </div>
+            <div style="font-weight:800;font-size:14.5px;color:var(--ink);margin-bottom:6px;line-height:1.35">${esc(t.title)}</div>
+            <div class="viral-topic-hook">🪝 <b>Hook 3s đầu:</b> "${esc(t.hook)}"</div>
+            <div style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.45"><b>🎬 Mạch truyện & Twist:</b> ${esc(t.angle)}</div>
+            <div style="font-size:12px;color:#047857;margin-top:5px;line-height:1.4"><b>📈 Cơ chế kéo Traffic:</b> ${esc(t.trafficReason)}</div>
+            ${t.suggestedCta ? `<div style="font-size:12px;color:var(--muted);margin-top:4px"><b>💬 Kết câu tương tác:</b> ${esc(t.suggestedCta)}</div>` : ''}
+          </div>
+          <div class="row" style="margin:8px 0 0;gap:6px">
+            <button type="button" class="small viral-btn" data-pick-viral="${idx}" style="flex:1">✨ Chọn chủ đề này</button>
+            <button type="button" class="small" data-run-viral-now="${idx}" title="Điền và bắt đầu viết kịch bản luôn">🚀 Viết kịch bản luôn</button>
+          </div>
+        </div>`).join('');
+    }
+    toast(`🔥 Đã tạo ${lastViralTopics.length} ý tưởng Video Viral kéo Traffic! Bấm chọn 1 chủ đề để làm ngay.`, 4500);
+  } catch (err) {
+    if (box) box.hidden = true;
+    toast(err.message, 6000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+function applyViralTopicIdea(idx) {
+  const t = lastViralTopics[Number(idx)];
+  if (!t) return false;
+  const form = $('#form-new');
+  if (!form) return false;
+  form.querySelector('[name=topic]').value = `${t.title}\n- Hook mở đầu: "${t.hook}"\n- Mạch câu chuyện: ${t.angle}`;
+  if (t.viralFormat && $('#viral-format-select')) {
+    $('#viral-format-select').value = t.viralFormat;
+    updateViralSelectHints();
+  }
+  if (t.suggestedCta) form.querySelector('[name=cta]').value = t.suggestedCta;
+  if (t.characterHint && !form.querySelector('[name=character]').value.trim()) {
+    form.querySelector('[name=character]').value = t.characterHint;
+  }
+  if ($('#viral-niche-input')?.value?.trim() && !form.querySelector('[name=audience]').value.trim()) {
+    form.querySelector('[name=audience]').value = $('#viral-niche-input').value.trim();
+  }
+  if (typeof scheduleDetectNewSkills === 'function') scheduleDetectNewSkills();
+  return true;
+}
+
+$('#viral-topics-result')?.addEventListener('click', (e) => {
+  const pickBtn = e.target.closest('[data-pick-viral]');
+  if (pickBtn) {
+    if (applyViralTopicIdea(pickBtn.dataset.pickViral)) {
+      $('#inp-topic')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      $('#inp-topic')?.focus();
+      toast('✓ Đã điền chủ đề Viral, Hook & CTA tương tác vào form!');
+    }
+    return;
+  }
+  const runBtn = e.target.closest('[data-run-viral-now]');
+  if (runBtn) {
+    if (applyViralTopicIdea(runBtn.dataset.runViralNow)) {
+      $('#form-new')?.requestSubmit($('#btn-submit-new'));
+    }
+  }
 });
 
 // Số cảnh: nhập tự do 2–11 (11 × 8s = 88s, vừa giới hạn 90s của Reel), có nút −/+ và chọn nhanh.
@@ -100,21 +327,24 @@ $('#scene-chips').addEventListener('click', (e) => { const b = e.target.closest(
 
 $('#form-new').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const btn = e.submitter;
-  btn.disabled = true;
+  const btn = e.submitter || $('#btn-submit-new');
+  if (btn) btn.disabled = true;
   try {
     syncNewSkillsInput();
     const { id } = await api('/api/jobs', { method: 'POST', body: new FormData(e.target) });
+    const keepMode = currentVideoType;
     e.target.reset();
     newSelectedSkills = [];
     syncNewSkillsInput();
     $('#new-skill-topics').hidden = true;
+    if ($('#viral-topics-result')) $('#viral-topics-result').hidden = true;
+    setNewVideoMode(keepMode);
     durHint();
     openJob(id);
   } catch (err) {
     toast(err.message);
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 });
 
@@ -176,6 +406,29 @@ function renderJob(job) {
     return { id: item.id, name: item.title || item.name || item.id, auto: Boolean(item.auto), reason: item.reason || '' };
   });
 
+  const isViral = job.input?.videoType === 'viral';
+  const vFmt = (cfg.viralFormats || []).find((f) => f.id === job.input?.viralFormat) || (cfg.viralFormats || [])[0];
+  const tGoal = (cfg.trafficGoals || []).find((g) => g.id === job.input?.trafficGoal) || (cfg.trafficGoals || [])[0];
+
+  const modeBarHtml = `
+    <div class="row" style="margin:8px 0 0;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="badge ${isViral ? 'viral-pill' : 'ads-pill'}" style="font-size:12px;padding:4px 10px">
+        ${isViral ? '🔥 Video Viral Kéo Traffic Fanpage' : '🛍️ Video Quảng Cáo Sản Phẩm'}
+      </span>
+      <select id="job-videotype" style="width:auto;font-size:12.5px;padding:4px 8px" ${busy ? 'disabled' : ''} title="Đổi loại video rồi bấm Viết lại kịch bản">
+        <option value="ads" ${!isViral ? 'selected' : ''}>Chế độ: 🛍️ Quảng cáo sản phẩm</option>
+        <option value="viral" ${isViral ? 'selected' : ''}>Chế độ: 🔥 Viral kéo Traffic hàng ngày</option>
+      </select>
+      ${isViral ? `
+        <select id="job-viral-format" style="width:auto;max-width:290px;font-size:12.5px;padding:4px 8px" ${busy ? 'disabled' : ''}>
+          ${(cfg.viralFormats || []).map((f) => `<option value="${esc(f.id)}" ${f.id === (job.input?.viralFormat || 'storytelling') ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}
+        </select>
+        <select id="job-traffic-goal" style="width:auto;max-width:290px;font-size:12.5px;padding:4px 8px" ${busy ? 'disabled' : ''}>
+          ${(cfg.trafficGoals || []).map((g) => `<option value="${esc(g.id)}" ${g.id === (job.input?.trafficGoal || 'engage_comment') ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
+        </select>
+      ` : ''}
+    </div>`;
+
   const skillBoxHtml = `
     <div class="skill-pick-box" style="margin-top:12px;padding:10px 12px">
       <div class="row" style="margin:0;justify-content:space-between;align-items:center">
@@ -197,8 +450,9 @@ function renderJob(job) {
       <div class="job-head">
         <div class="grow">
           <h1>${esc(job.input.topic)}</h1>
-          <div class="muted">${job.input.sceneCount} cảnh · ${doneCount}/${job.scenes.length} cảnh có video · ${esc(STAGE[job.stage] || job.stage)}
+          <div class="muted">${job.input.sceneCount} cảnh · ${doneCount}/${job.scenes.length} cảnh có video · ${esc(STAGE[job.stage] || job.stage)}${isViral && vFmt ? ` · ${esc(vFmt.name)}` : ''}${isViral && tGoal ? ` · ${esc(tGoal.name)}` : ''}
           </div>
+          ${modeBarHtml}
         </div>
         ${busy ? `<div class="busy"><span class="spin"></span>${esc(job.busy)}</div>` : ''}
       </div>
@@ -216,13 +470,13 @@ function renderJob(job) {
   const s = job.script.summary;
   const summary = `
     <div class="card">
-      <h2>✦ Mạch video</h2>
+      <h2>✦ Mạch video ${isViral ? '(Công thức Viral Kéo Traffic Fanpage)' : '(Công thức Quảng Cáo Chuyển Đổi)'}</h2>
       <dl class="summary">
         <dt>Hook</dt><dd>${esc(s.hook)}</dd>
-        <dt>Lời hứa chính</dt><dd>${esc(s.corePromise)}</dd>
-        <dt>Biến đổi</dt><dd>${esc(s.transformation)}</dd>
-        <dt>Cao trào</dt><dd>${esc(s.climax)}</dd>
-        <dt>CTA</dt><dd>${esc(s.cta)}</dd>
+        <dt>${isViral ? 'Thông điệp / Sự thật' : 'Lời hứa chính'}</dt><dd>${esc(s.corePromise)}</dd>
+        <dt>${isViral ? 'Chuyển biến cảm xúc' : 'Biến đổi'}</dt><dd>${esc(s.transformation)}</dd>
+        <dt>${isViral ? 'Cao trào / Cú Twist' : 'Cao trào'}</dt><dd>${esc(s.climax)}</dd>
+        <dt>${isViral ? 'Mồi kéo Traffic / CTA' : 'CTA'}</dt><dd>${esc(s.cta)}</dd>
       </dl>
       <details><summary>B. Bảng nối cảnh</summary>
         <table class="cmap"><tr><th>Cảnh</th><th>Bắt đầu từ</th><th>Kết thúc bằng</th></tr>
@@ -230,7 +484,7 @@ function renderJob(job) {
         </table>
       </details>
       <div class="row">
-        <button data-act="script" ${busy ? 'disabled' : ''}>Viết lại toàn bộ kịch bản (theo Skill đã chọn)</button>
+        <button data-act="script" ${busy ? 'disabled' : ''}>Viết lại toàn bộ kịch bản (theo Chế độ & Skill đã chọn)</button>
       </div>
     </div>`;
 
@@ -1002,6 +1256,13 @@ $('#view-job').addEventListener('change', async (e) => {
     await api(`/api/jobs/${currentJob.id}`, { method: 'PATCH', body: { [key]: el.value } }).catch((err) => toast(err.message));
     return refresh(true);
   }
+  if (el.id === 'job-videotype' || el.id === 'job-viral-format' || el.id === 'job-traffic-goal') {
+    const key = { 'job-videotype': 'videoType', 'job-viral-format': 'viralFormat', 'job-traffic-goal': 'trafficGoal' }[el.id];
+    await api(`/api/jobs/${currentJob.id}`, { method: 'PATCH', body: { [key]: el.value } }).catch((err) => toast(err.message));
+    toast('Đã cập nhật chế độ kịch bản — bấm "Viết lại kịch bản" để áp dụng', 3500);
+    loadList();
+    return refresh(true);
+  }
   if (el.id === 'job-skill-add' && el.value) {
     const nextSkills = [...new Set([...(currentJob.input?.skills || []), el.value])];
     await api(`/api/jobs/${currentJob.id}`, { method: 'PATCH', body: { skills: nextSkills } }).catch((err) => toast(err.message));
@@ -1234,12 +1495,15 @@ function getNewFormInput() {
   const form = $('#form-new');
   if (!form) return {};
   return {
-    topic: form.querySelector('[name=topic]')?.value?.trim() || '',
+    topic: form.querySelector('[name=topic]')?.value?.trim() || $('#viral-niche-input')?.value?.trim() || '',
     character: form.querySelector('[name=character]')?.value?.trim() || '',
     audience: form.querySelector('[name=audience]')?.value?.trim() || '',
     mustSay: form.querySelector('[name=mustSay]')?.value?.trim() || '',
     tone: form.querySelector('[name=tone]')?.value?.trim() || '',
     cta: form.querySelector('[name=cta]')?.value?.trim() || '',
+    videoType: currentVideoType,
+    viralFormat: $('#viral-format-select')?.value || 'storytelling',
+    trafficGoal: $('#traffic-goal-select')?.value || 'engage_comment',
   };
 }
 
@@ -1252,14 +1516,14 @@ function scheduleDetectNewSkills() {
     const combinedText = `${userInput.topic} ${userInput.character} ${userInput.audience} ${userInput.mustSay}`.trim();
     const box = $('#new-agent-detected');
     if (!box) return;
-    if (combinedText.length < 3) {
+    if (combinedText.length < 3 && userInput.videoType !== 'viral') {
       box.hidden = true;
       return;
     }
     try {
       const r = await api('/api/skills/detect', {
         method: 'POST',
-        body: { userInput, mode: 'fast', taskType: 'video', excludeIds: newSelectedSkills },
+        body: { userInput, mode: 'fast', taskType: userInput.videoType === 'viral' ? 'viral' : 'video', excludeIds: newSelectedSkills },
       });
       const list = r.matchedSkills || [];
       if (!list.length) {
@@ -1285,7 +1549,7 @@ function scheduleDetectNewSkills() {
 }
 
 $('#form-new')?.addEventListener('input', (e) => {
-  if (['topic', 'character', 'audience', 'mustSay', 'tone'].includes(e.target?.name)) {
+  if (['topic', 'character', 'audience', 'mustSay', 'tone'].includes(e.target?.name) || e.target?.id === 'viral-niche-input') {
     scheduleDetectNewSkills();
   }
 });
@@ -1946,6 +2210,13 @@ $('#skills-grid')?.addEventListener('click', async (e) => {
   window.voiceOpts = voiceOpts;
   $('#voice-select').insertAdjacentHTML('beforeend', voiceOpts('me'));
   $('#flow-model-select').innerHTML = (cfg.flowModels || []).map((m) => `<option>${esc(m)}</option>`).join('');
+  if ($('#viral-format-select')) {
+    $('#viral-format-select').innerHTML = (cfg.viralFormats || []).map((f) => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
+  }
+  if ($('#traffic-goal-select')) {
+    $('#traffic-goal-select').innerHTML = (cfg.trafficGoals || []).map((g) => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('');
+  }
+  setNewVideoMode('ads');
   $('#status-pills').innerHTML = `
     <span class="pill" id="pill-cl">Claude…</span>
     <span class="pill" id="pill-flow">Flow…</span>

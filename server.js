@@ -16,7 +16,7 @@ import * as FBB from './lib/fb-browser.js';
 import { FLOW_MODELS } from './lib/flow-auto.js';
 import * as J from './lib/jobs.js';
 import * as SK from './lib/skills.js';
-import { extractBriefFromSkills, askWithSkills, resolveAgentSkills } from './lib/llm.js';
+import { extractBriefFromSkills, askWithSkills, resolveAgentSkills, generateViralTopics, VIRAL_FORMATS, TRAFFIC_GOALS } from './lib/llm.js';
 
 fs.mkdirSync(path.join(config.dataDir, 'uploads'), { recursive: true });
 SK.initSkills();
@@ -65,6 +65,8 @@ app.get('/api/config', (_req, res) => {
     fbConfigured: fbConfigured(),
     voices: VOICES,
     flowModels: FLOW_MODELS,
+    viralFormats: VIRAL_FORMATS,
+    trafficGoals: TRAFFIC_GOALS,
   });
 });
 
@@ -137,6 +139,9 @@ app.post('/api/jobs', upload.single('refImage'), wrap(async (req, res) => {
   const input = {
     topic: b.topic.trim(),
     sceneCount,
+    videoType: b.videoType === 'viral' ? 'viral' : 'ads',
+    viralFormat: b.viralFormat?.trim() || 'storytelling',
+    trafficGoal: b.trafficGoal?.trim() || 'engage_comment',
     audience: b.audience?.trim() || '',
     cta: b.cta?.trim() || '',
     character: b.character?.trim() || '',
@@ -264,6 +269,7 @@ app.post('/api/skills/upload', uploadSkillFiles.array('files', 30), wrap(async (
 }));
 app.post('/api/skills/extract-brief', wrap(async (req, res) => res.json(await extractBriefFromSkills(req.body || {}))));
 app.post('/api/skills/ask', wrap(async (req, res) => res.json(await askWithSkills(req.body || {}))));
+app.post('/api/viral/topics', wrap(async (req, res) => res.json(await generateViralTopics(req.body || {}))));
 app.post('/api/skills', wrap(async (req, res) => res.json(SK.saveSkill(req.body || {}))));
 app.get('/api/skills/:id', wrap(async (req, res) => res.json(SK.getSkill(req.params.id))));
 app.patch('/api/skills/:id', wrap(async (req, res) => res.json(SK.patchSkillMeta(req.params.id, req.body || {}))));
