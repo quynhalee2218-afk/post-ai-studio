@@ -29,10 +29,14 @@ function toast(msg, ms = 4000) {
 }
 
 function show(view) {
-  for (const v of ['new', 'job', 'empty', 'posts', 'accounts']) $(`#view-${v}`).hidden = v !== view;
+  for (const v of ['new', 'job', 'empty', 'skills', 'posts', 'accounts']) {
+    const el = $(`#view-${v}`);
+    if (el) el.hidden = v !== view;
+  }
+  $('#tab-skills')?.classList.toggle('active', view === 'skills');
   $('#tab-posts').classList.toggle('active', view === 'posts');
   $('#tab-accounts').classList.toggle('active', view === 'accounts');
-  $('#tab-videos').classList.toggle('active', !['posts', 'accounts'].includes(view));
+  $('#tab-videos').classList.toggle('active', !['skills', 'posts', 'accounts'].includes(view));
   document.body.dataset.view = view;
   $('.side').classList.remove('open'); // mobile: mở video xong thì gấp danh sách lại
   if (typeof sideLabel === 'function') sideLabel();
@@ -99,8 +103,12 @@ $('#form-new').addEventListener('submit', async (e) => {
   const btn = e.submitter;
   btn.disabled = true;
   try {
+    syncNewSkillsInput();
     const { id } = await api('/api/jobs', { method: 'POST', body: new FormData(e.target) });
     e.target.reset();
+    newSelectedSkills = [];
+    syncNewSkillsInput();
+    $('#new-skill-topics').hidden = true;
     durHint();
     openJob(id);
   } catch (err) {
@@ -156,6 +164,27 @@ function renderJob(job) {
   const nextIdx = job.scenes.findIndex((s) => !s.clip);
   const fileUrl = (rel) => `/files/${job.id}/${rel}`;
 
+  const jobSkillIds = Array.isArray(job.input?.skills) ? job.input.skills : [];
+  const usedList = job.usedSkills?.length
+    ? job.usedSkills
+    : jobSkillIds.map((id) => skillsList.find((x) => x.id === id) || { id, name: id });
+
+  const skillBoxHtml = `
+    <div class="skill-pick-box" style="margin-top:12px;padding:10px 12px">
+      <div class="row" style="margin:0;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;font-weight:700;color:var(--ink-2)">📚 Skill AI áp dụng cho kịch bản này:</span>
+        <select id="job-skill-add" style="width:auto;max-width:320px;font-size:12.5px;padding:5px 8px" ${busy ? 'disabled' : ''}>
+          <option value="">＋ Gắn thêm Skill rồi Viết lại kịch bản…</option>
+          ${skillsList.map((sk) => `<option value="${esc(sk.id)}" ${jobSkillIds.includes(sk.id) ? 'disabled' : ''}>${esc(sk.name)} (${esc(sk.id)})</option>`).join('')}
+        </select>
+      </div>
+      <div class="skill-tags" style="margin-top:6px">
+        ${usedList.length
+          ? usedList.map((sk) => `<span class="skill-tag">${esc(sk.name || sk.id)} <code>${esc(sk.id)}</code>${!busy && jobSkillIds.includes(sk.id) ? `<button type="button" data-job-rm-skill="${esc(sk.id)}" title="Bỏ Skill này">✕</button>` : ''}</span>`).join('')
+          : '<span class="muted" style="font-size:12.5px">Chưa gắn Skill riêng (chỉ dùng quy tắc Video AI mặc định & các Skill đã ghim 📌).</span>'}
+      </div>
+    </div>`;
+
   const head = `
     <div class="card">
       <div class="job-head">
@@ -167,6 +196,7 @@ function renderJob(job) {
         ${busy ? `<div class="busy"><span class="spin"></span>${esc(job.busy)}</div>` : ''}
       </div>
       ${stepper(job)}
+      ${skillBoxHtml}
       ${job.error ? `<div class="error-box">${esc(job.error)}</div>` : ''}
       ${!job.script && !busy ? `<div class="row"><button data-act="script" class="primary">Viết lại kịch bản</button></div>` : ''}
     </div>`;
@@ -193,7 +223,7 @@ function renderJob(job) {
         </table>
       </details>
       <div class="row">
-        <button data-act="script" ${busy ? 'disabled' : ''}>Viết lại toàn bộ kịch bản</button>
+        <button data-act="script" ${busy ? 'disabled' : ''}>Viết lại toàn bộ kịch bản (theo Skill đã chọn)</button>
       </div>
     </div>`;
 
@@ -965,6 +995,12 @@ $('#view-job').addEventListener('change', async (e) => {
     await api(`/api/jobs/${currentJob.id}`, { method: 'PATCH', body: { [key]: el.value } }).catch((err) => toast(err.message));
     return refresh(true);
   }
+  if (el.id === 'job-skill-add' && el.value) {
+    const nextSkills = [...new Set([...(currentJob.input?.skills || []), el.value])];
+    await api(`/api/jobs/${currentJob.id}`, { method: 'PATCH', body: { skills: nextSkills } }).catch((err) => toast(err.message));
+    toast('Đã gắn thêm Skill — bấm "Viết lại kịch bản" để áp dụng', 4000);
+    return refresh(true);
+  }
   const field = el.dataset.field;
   if (!field) return;
   try {
@@ -974,6 +1010,658 @@ $('#view-job').addEventListener('change', async (e) => {
       await api(`/api/jobs/${currentJob.id}/scenes/${el.dataset.i}`, { method: 'PATCH', body: { [field]: el.value } });
     }
     toast('Đã lưu', 1200);
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+$('#view-job').addEventListener('click', async (e) => {
+  const rmBtn = e.target.closest('[data-job-rm-skill]');
+  if (!rmBtn || !currentJob) return;
+  const rmId = rmBtn.dataset.jobRmSkill;
+  const nextSkills = (currentJob.input?.skills || []).filter((id) => id !== rmId);
+  try {
+    await api(`/api/jobs/${currentJob.id}`, { method: 'PATCH', body: { skills: nextSkills } });
+    toast('Đã gỡ Skill khỏi video này', 2500);
+    refresh(true);
+  } catch (err) { toast(err.message); }
+});
+
+// ---------- Kho Skill AI & Đồng bộ từ Claude ----------
+let skillsList = [];
+let newSelectedSkills = [];
+let askSelectedSkills = [];
+let skillFilterCat = 'all';
+let currentDetailSkill = null;
+let currentDetailFile = 'SKILL.md';
+let lastAskResult = null;
+
+const skTitle = (sk) => sk?.title || sk?.name || sk?.id || '';
+
+function skillCategory(sk) {
+  if (sk.category && ['video', 'dna', 'content'].includes(sk.category)) return sk.category;
+  const text = `${sk.id} ${sk.name} ${sk.title || ''} ${sk.description}`.toLowerCase();
+  if (/veo3|veo|video|flow|animation|scene|kich-ban|kịch bản|reel|tiktok|storyboard|camera|prompt/.test(text)) return 'video';
+  if (/dna|nhan-hieu|nhân hiệu|brand|taki|daothilan|lenhuquynh|profile|chan-dung|chân dung/.test(text)) return 'dna';
+  return 'content';
+}
+
+function formatBytes(b) {
+  const n = Number(b) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function syncNewSkillsInput() {
+  const inp = $('#new-skills-input');
+  if (inp) inp.value = JSON.stringify(newSelectedSkills);
+  renderNewSkillTags();
+}
+
+function renderNewSkillTags() {
+  const box = $('#new-skill-tags');
+  if (!box) return;
+  const pinned = skillsList.filter((s) => s.pinned && !s.builtin && !newSelectedSkills.includes(s.id));
+  const selected = newSelectedSkills.map((id) => skillsList.find((s) => s.id === id) || { id, name: id });
+  const html = [
+    ...pinned.map((sk) => `<span class="skill-tag pinned" title="Skill đang ghim — tự động áp dụng cho mọi kịch bản">📌 ${esc(skTitle(sk))} <code>${esc(sk.id)}</code></span>`),
+    ...selected.map((sk) => `<span class="skill-tag">${esc(skTitle(sk))} <code>${esc(sk.id)}</code><button type="button" data-rm-new-skill="${esc(sk.id)}" title="Bỏ chọn">✕</button></span>`),
+  ];
+  box.innerHTML = html.length ? html.join('') : '<span class="muted" style="font-size:12.5px">Chưa chọn Skill riêng (mặc định dùng quy tắc chuẩn Video AI). Chọn thêm Skill ở trên để AI đọc kiến thức & nhân vật từ Skill.</span>';
+}
+
+function renderAskSkillTags() {
+  const box = $('#ask-skill-tags');
+  if (!box) return;
+  const pinned = skillsList.filter((s) => s.pinned && !s.builtin && !askSelectedSkills.includes(s.id));
+  const selected = askSelectedSkills.map((id) => skillsList.find((s) => s.id === id) || { id, name: id });
+  const html = [
+    ...pinned.map((sk) => `<span class="skill-tag pinned">📌 ${esc(skTitle(sk))} <code>${esc(sk.id)}</code></span>`),
+    ...selected.map((sk) => `<span class="skill-tag">${esc(skTitle(sk))} <code>${esc(sk.id)}</code><button type="button" data-rm-ask-skill="${esc(sk.id)}" title="Bỏ chọn">✕</button></span>`),
+  ];
+  box.innerHTML = html.length ? html.join('') : '<span class="muted" style="font-size:12.5px">Chưa chọn Skill nào — hãy chọn 1 hoặc nhiều Skill ở ô phía trên (hoặc bấm "✦ Chạy AI" ở thẻ Skill bên dưới).</span>';
+}
+
+function populateSkillSelects() {
+  const groups = {
+    video: skillsList.filter((s) => skillCategory(s) === 'video'),
+    dna: skillsList.filter((s) => skillCategory(s) === 'dna'),
+    content: skillsList.filter((s) => skillCategory(s) === 'content'),
+  };
+  const renderOpts = (excludeIds = []) => [
+    ['🎬 Video / Veo3 / Kịch bản', groups.video],
+    ['🧬 DNA / Nhân hiệu / Hồ sơ', groups.dna],
+    ['✍️ Content / Marketing / Khác', groups.content],
+  ].map(([label, arr]) => arr.length ? `<optgroup label="${esc(label)}">${arr.map((s) => `<option value="${esc(s.id)}" ${excludeIds.includes(s.id) ? 'disabled' : ''}>${s.pinned ? '📌 ' : ''}${esc(skTitle(s))} (${esc(s.id)}) — ${(s.description || '').slice(0, 55)}</option>`).join('')}</optgroup>` : '').join('');
+
+  const selNew = $('#new-skill-select');
+  if (selNew) selNew.innerHTML = `<option value="">＋ Chọn thêm Skill từ kho (${skillsList.length} Skill) để gắn vào kịch bản…</option>${renderOpts(newSelectedSkills)}`;
+  const selAsk = $('#ask-skill-select');
+  if (selAsk) selAsk.innerHTML = `<option value="">＋ Chọn thêm Skill (${skillsList.length} Skill) để nạp cho AI…</option>${renderOpts(askSelectedSkills)}`;
+  renderNewSkillTags();
+  renderAskSkillTags();
+}
+
+async function loadSkills(sync = false) {
+  try {
+    if (sync) {
+      const btn = $('#btn-skill-sync');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang đồng bộ…'; }
+      const r = await api('/api/skills/sync', { method: 'POST' });
+      skillsList = r.skills || [];
+      toast(`Đã đồng bộ từ Claude: thêm mới ${r.added ?? r.imported ?? 0} Skill, cập nhật ${r.updated ?? 0} Skill (tổng ${skillsList.length} Skill)`, 5000);
+      if (btn) { btn.disabled = false; btn.textContent = '↻ Đồng bộ từ Claude'; }
+    } else {
+      skillsList = await api('/api/skills');
+    }
+    populateSkillSelects();
+    renderSkillsGrid();
+  } catch (err) {
+    toast(err.message, 6000);
+    const btn = $('#btn-skill-sync');
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Đồng bộ từ Claude'; }
+  }
+}
+
+function renderSkillsGrid() {
+  const grid = $('#skills-grid');
+  if (!grid) return;
+  const q = ($('#skill-search')?.value || '').trim().toLowerCase();
+  const isClaudeSource = (sk) => sk.source === 'claude' || sk.source === 'claude-sync';
+  const filtered = skillsList.filter((sk) => {
+    if (skillFilterCat === 'pinned' && !sk.pinned) return false;
+    if (skillFilterCat === 'upload' && (isClaudeSource(sk) || sk.builtin)) return false;
+    if (['video', 'dna', 'content'].includes(skillFilterCat) && skillCategory(sk) !== skillFilterCat) return false;
+    if (!q) return true;
+    return `${sk.id} ${sk.name} ${sk.title || ''} ${sk.description}`.toLowerCase().includes(q);
+  });
+
+  const syncedCount = skillsList.filter(isClaudeSource).length;
+  const customCount = skillsList.filter((s) => !isClaudeSource(s) && !s.builtin).length;
+  const pinnedCount = skillsList.filter((s) => s.pinned).length;
+  const stats = $('#skill-stats');
+  if (stats) {
+    stats.innerHTML = `Tổng cộng <b>${skillsList.length} Skill</b> (<b>${syncedCount}</b> đồng bộ từ Claude · <b>${customCount}</b> tải lên/tự tạo · <b>${pinnedCount}</b> đang ghim 📌) — Đang hiển thị <b>${filtered.length}</b> Skill.`;
+  }
+
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="card muted" style="grid-column:1/-1;text-align:center;padding:36px">Không tìm thấy Skill nào khớp bộ lọc. Bạn có thể bấm <b>↻ Đồng bộ từ Claude</b> hoặc <b>⬆ Đẩy file / .zip Skill lên</b>.</div>`;
+    return;
+  }
+
+  const catBadge = (sk) => {
+    const c = skillCategory(sk);
+    if (c === 'video') return '<span class="badge running">🎬 Video / Veo3</span>';
+    if (c === 'dna') return '<span class="badge scheduled">🧬 DNA / Nhân hiệu</span>';
+    return '<span class="badge">✍️ Kiến thức / Content</span>';
+  };
+
+  grid.innerHTML = filtered.map((sk) => `
+    <div class="card skill-card ${sk.pinned ? 'is-pinned' : ''}" data-skill-id="${esc(sk.id)}">
+      <div>
+        <div class="skill-card-head">
+          <div>
+            <h3 class="skill-card-title">${sk.pinned ? '📌 ' : ''}${esc(skTitle(sk))}</h3>
+            <span class="skill-card-id">${esc(sk.id)}</span>
+          </div>
+          ${catBadge(sk)}
+        </div>
+        <p class="skill-card-desc" title="${esc(sk.description)}">${esc(sk.description || 'Chưa có mô tả ngắn.')}</p>
+      </div>
+      <div>
+        <div class="skill-card-meta">
+          <span>${sk.builtin ? '⚙ Mặc định hệ thống' : isClaudeSource(sk) ? '🔄 Đồng bộ Claude' : '⬆ Tải lên / Tự tạo'}</span>
+          <span>· 📄 ${sk.fileCount} file (${formatBytes(sk.size ?? sk.totalBytes)})</span>
+        </div>
+        <div class="row" style="margin-top:10px;gap:6px">
+          <button class="small primary" data-sk-act="use-video" title="Gắn Skill này vào Tạo video mới để viết kịch bản">🎬 Dùng viết kịch bản</button>
+          <button class="small" data-sk-act="use-ask" title="Đưa Skill này lên khung Chạy AI phía trên">✦ Chạy AI</button>
+          <button class="small" data-sk-act="detail">👁 Xem / File (${sk.fileCount})</button>
+          ${!sk.builtin ? `<button class="small ${sk.pinned ? 'primary' : ''}" data-sk-act="pin" title="Ghim để tự động nạp vào mọi kịch bản">${sk.pinned ? '📌 Đã ghim' : '📌 Ghim'}</button>
+          <button class="small danger" data-sk-act="delete" title="Xoá Skill này">🗑</button>` : ''}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function openSkillsView() {
+  currentId = null;
+  stopPoll();
+  loadList();
+  show('skills');
+  loadSkills(false);
+}
+
+$('#tab-skills')?.addEventListener('click', openSkillsView);
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-goto-skills]')) {
+    e.preventDefault();
+    openSkillsView();
+  }
+});
+
+$('#btn-skill-sync')?.addEventListener('click', () => loadSkills(true));
+$('#skill-search')?.addEventListener('input', renderSkillsGrid);
+$('#skill-filter-chips')?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-cat]');
+  if (!b) return;
+  skillFilterCat = b.dataset.cat;
+  for (const x of document.querySelectorAll('#skill-filter-chips button')) x.classList.toggle('on', x.dataset.cat === skillFilterCat);
+  renderSkillsGrid();
+});
+
+// Chọn / bỏ chọn Skill ở form Tạo video mới
+$('#new-skill-select')?.addEventListener('change', (e) => {
+  const val = e.target.value;
+  if (!val) return;
+  if (!newSelectedSkills.includes(val)) newSelectedSkills.push(val);
+  e.target.value = '';
+  syncNewSkillsInput();
+  populateSkillSelects();
+});
+$('#new-skill-tags')?.addEventListener('click', (e) => {
+  const rm = e.target.closest('[data-rm-new-skill]');
+  if (!rm) return;
+  newSelectedSkills = newSelectedSkills.filter((id) => id !== rm.dataset.rmNewSkill);
+  syncNewSkillsInput();
+  populateSkillSelects();
+});
+
+// AI trích dữ liệu từ Skill vào form Tạo video mới
+$('#btn-extract-skill')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const pinnedIds = skillsList.filter((s) => s.pinned).map((s) => s.id);
+  const ids = [...new Set([...newSelectedSkills, ...pinnedIds])];
+  if (!ids.length) {
+    toast('Hãy chọn ít nhất 1 Skill ở ô bên dưới (hoặc ghim Skill) trước khi bấm trích dữ liệu!');
+    $('#new-skill-select')?.focus();
+    return;
+  }
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ AI đang đọc Skill & trích dữ liệu…';
+  toast('Claude đang đọc kỹ nội dung Skill và các file references để trích xuất dữ liệu…', 45000);
+  try {
+    const form = $('#form-new');
+    const curTopic = form.querySelector('[name=topic]').value.trim();
+    const res = await api('/api/skills/extract-brief', {
+      method: 'POST',
+      body: { skillIds: ids, topic: curTopic },
+    });
+    if (res.topic && !curTopic) form.querySelector('[name=topic]').value = res.topic;
+    if (res.audience) form.querySelector('[name=audience]').value = res.audience;
+    if (res.character) form.querySelector('[name=character]').value = res.character;
+    if (res.tone) form.querySelector('[name=tone]').value = res.tone;
+    if (res.mustSay) form.querySelector('[name=mustSay]').value = res.mustSay;
+    if (res.avoid) form.querySelector('[name=avoid]').value = res.avoid;
+    if (res.cta) form.querySelector('[name=cta]').value = res.cta;
+
+    const topicsBox = $('#new-skill-topics');
+    if (topicsBox && Array.isArray(res.suggestedTopics) && res.suggestedTopics.length) {
+      topicsBox.hidden = false;
+      topicsBox.innerHTML = `
+        <div class="skill-topics-title">💡 Gợi ý chủ đề từ Skill (bấm vào để điền nhanh vào ô Chủ đề):</div>
+        <div class="chips">${res.suggestedTopics.map((t) => `<button type="button" data-pick-topic="${esc(t)}">${esc(t)}</button>`).join('')}</div>`;
+    }
+    toast(`✓ Đã trích xuất dữ liệu từ ${res.usedSkills?.map((s) => s.name).join(', ') || 'Skill'} vào form!`, 5000);
+  } catch (err) {
+    toast(err.message, 7000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+});
+
+$('#new-skill-topics')?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pick-topic]');
+  if (!b) return;
+  const topicEl = $('#form-new [name=topic]');
+  if (topicEl) {
+    topicEl.value = b.dataset.pickTopic;
+    topicEl.focus();
+    toast('Đã điền chủ đề gợi ý từ Skill', 2000);
+  }
+});
+
+// Chọn / bỏ chọn Skill ở khung Chạy AI trong tab Skill AI
+$('#ask-skill-select')?.addEventListener('change', (e) => {
+  const val = e.target.value;
+  if (!val) return;
+  if (!askSelectedSkills.includes(val)) askSelectedSkills.push(val);
+  e.target.value = '';
+  populateSkillSelects();
+});
+$('#ask-skill-tags')?.addEventListener('click', (e) => {
+  const rm = e.target.closest('[data-rm-ask-skill]');
+  if (!rm) return;
+  askSelectedSkills = askSelectedSkills.filter((id) => id !== rm.dataset.rmAskSkill);
+  populateSkillSelects();
+});
+$('#ask-quick-prompts')?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-q]');
+  if (!b) return;
+  const inp = $('#ask-skill-prompt');
+  if (inp) { inp.value = b.dataset.q; inp.focus(); }
+});
+
+// Chạy Model AI với các Skill đã chọn
+$('#btn-ask-skill')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const prompt = ($('#ask-skill-prompt')?.value || '').trim();
+  if (!prompt) {
+    toast('Hãy nhập yêu cầu hoặc bấm 1 gợi ý nhanh phía trên!');
+    $('#ask-skill-prompt')?.focus();
+    return;
+  }
+  const pinnedIds = skillsList.filter((s) => s.pinned).map((s) => s.id);
+  const ids = [...new Set([...askSelectedSkills, ...pinnedIds])];
+  if (!ids.length) {
+    toast('Hãy chọn ít nhất 1 Skill để AI đọc kiến thức!');
+    $('#ask-skill-select')?.focus();
+    return;
+  }
+  const st = $('#ask-skill-status');
+  const out = $('#ask-skill-result');
+  btn.disabled = true;
+  if (st) st.innerHTML = '<span class="busy"><span class="spin"></span>AI đang đọc hiểu Skill & xử lý yêu cầu (khoảng 15–45 giây)…</span>';
+  try {
+    const r = await api('/api/skills/ask', {
+      method: 'POST',
+      body: { skillIds: ids, prompt },
+    });
+    lastAskResult = { ...r, skillIds: ids };
+    if (out) {
+      out.hidden = false;
+      out.innerHTML = `
+        <div class="skill-answer-box">
+          <div class="job-head" style="margin-bottom:8px">
+            <div>
+              <h3 style="font-size:16px">${esc(r.title || 'Kết quả từ AI')}</h3>
+              <small class="muted">Đã tham chiếu Skill: ${(r.usedSkills || []).map((s) => `<b>${esc(s.name)}</b> (<code>${esc(s.id)}</code>)`).join(', ')}</small>
+            </div>
+            <div class="row" style="margin:0">
+              <button type="button" class="small" id="btn-copy-ask-ans">📋 Copy kết quả</button>
+              <button type="button" class="small primary" id="btn-ask-to-video">🎬 Đưa sang Tạo video mới & Viết kịch bản</button>
+            </div>
+          </div>
+          <div class="skill-answer-body">${esc(r.answer || '')}</div>
+        </div>`;
+    }
+    if (st) st.textContent = '✓ Hoàn tất';
+  } catch (err) {
+    if (st) st.textContent = '';
+    toast(err.message, 7000);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#ask-skill-result')?.addEventListener('click', async (e) => {
+  if (e.target.closest('#btn-copy-ask-ans') && lastAskResult) {
+    await navigator.clipboard.writeText(lastAskResult.answer || '');
+    toast('Đã copy nội dung phản hồi của AI');
+  }
+  if (e.target.closest('#btn-ask-to-video') && lastAskResult) {
+    newSelectedSkills = [...new Set([...newSelectedSkills, ...(lastAskResult.skillIds || [])])];
+    syncNewSkillsInput();
+    populateSkillSelects();
+    const form = $('#form-new');
+    const vb = lastAskResult.videoBrief || {};
+    form.querySelector('[name=topic]').value = vb.topic || `${lastAskResult.title || ''}\n${(lastAskResult.answer || '').slice(0, 600)}`.trim();
+    if (vb.audience) form.querySelector('[name=audience]').value = vb.audience;
+    if (vb.character) form.querySelector('[name=character]').value = vb.character;
+    if (vb.tone) form.querySelector('[name=tone]').value = vb.tone;
+    if (vb.mustSay) form.querySelector('[name=mustSay]').value = vb.mustSay;
+    if (vb.avoid) form.querySelector('[name=avoid]').value = vb.avoid;
+    if (vb.cta) form.querySelector('[name=cta]').value = vb.cta;
+    show('new');
+    toast('Đã chuyển thông tin & Skill sang form Tạo video mới!');
+  }
+});
+
+// Modal tải lên .zip / file Skill hoặc Tạo Skill mới
+$('#btn-skill-upload-open')?.addEventListener('click', () => {
+  const box = $('#skill-modal-box');
+  if (!box) return;
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="job-head">
+      <h2>⬆ Đẩy Skill lên kho (.zip, SKILL.md, tài liệu references)</h2>
+      <button type="button" class="small" data-close-skill-modal>Đóng ✕</button>
+    </div>
+    <p class="muted" style="margin-top:0;font-size:13.5px">
+      Bạn có thể chọn:<br>
+      • <b>1 hoặc nhiều file <code>.zip</code></b> (chứa thư mục Skill có <code>SKILL.md</code> và <code>references/</code> — hệ thống tự giải nén toàn bộ các Skill bên trong).<br>
+      • Hoặc chọn <b>file <code>SKILL.md</code> kèm các file tài liệu</b> (<code>.md</code>, <code>.txt</code>, <code>.json</code>, <code>.csv</code>, <code>.pdf</code>, <code>.docx</code>…) để tạo mới hoặc bổ sung vào 1 Skill có sẵn.
+    </p>
+    <form id="form-skill-upload" class="grid-form">
+      <label class="full">Chọn file tải lên (chọn được nhiều file cùng lúc) *
+        <input type="file" name="files" multiple required accept=".zip,.md,.txt,.json,.csv,.tsv,.yaml,.yml,.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp">
+      </label>
+      <label>Đẩy vào Skill nào?
+        <select name="targetSkillId">
+          <option value="">— Tự nhận diện từ file .zip / SKILL.md hoặc tạo mới —</option>
+          ${skillsList.map((s) => `<option value="${esc(s.id)}">Bổ sung vào: ${esc(s.name)} (${esc(s.id)})</option>`).join('')}
+        </select>
+      </label>
+      <label>Tên Skill (tuỳ chọn nếu tải lẻ file tài liệu)
+        <input name="name" placeholder="VD: Kịch bản Trà An Nhiên Veo3">
+      </label>
+      <label class="full">Mô tả ngắn / Khi nào dùng Skill này (tuỳ chọn)
+        <input name="description" placeholder="VD: Công thức viết kịch bản video AI và hồ sơ sản phẩm...">
+      </label>
+      <div class="full actions">
+        <button type="submit" class="primary">⬆ Tải lên & Nạp vào kho Skill</button>
+        <button type="button" data-close-skill-modal>Huỷ</button>
+      </div>
+    </form>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+$('#btn-skill-new-open')?.addEventListener('click', () => {
+  const box = $('#skill-modal-box');
+  if (!box) return;
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="job-head">
+      <h2>＋ Tạo Skill kiến thức mới</h2>
+      <button type="button" class="small" data-close-skill-modal>Đóng ✕</button>
+    </div>
+    <form id="form-skill-create" class="grid-form">
+      <label>Tên Skill *
+        <input name="name" required placeholder="VD: Kịch bản Mỹ phẩm Organic Veo3">
+      </label>
+      <label>Mã định danh (để trống tự tạo từ tên)
+        <input name="id" placeholder="VD: my-pham-organic-veo3">
+      </label>
+      <label class="full">Mô tả ngắn (giúp AI hiểu khi nào và cách áp dụng Skill này) *
+        <input name="description" required placeholder="VD: Hồ sơ nhân vật, thông tin sản phẩm, công thức Hook và quy tắc viết kịch bản...">
+      </label>
+      <label class="full">Nội dung kiến thức chính (<code>SKILL.md</code>) *
+        <textarea name="content" rows="14" class="prompt" required placeholder="# Tên Skill&#10;&#10;## 1. Hồ sơ Nhân vật (Character DNA)&#10;- Ngoại hình, độ tuổi, trang phục cố định, giọng nói...&#10;&#10;## 2. Thông tin Sản phẩm / Dịch vụ & USP&#10;- Công dụng, giá bán, ưu đãi, nỗi đau khách hàng...&#10;&#10;## 3. Công thức Kịch bản & Quy tắc bắt buộc&#10;- Cấu trúc các cảnh, từ ngữ nên dùng và từ cấm..."></textarea>
+      </label>
+      <div class="full actions">
+        <button type="submit" class="primary">💾 Lưu Skill mới</button>
+        <button type="button" data-close-skill-modal>Huỷ</button>
+      </div>
+    </form>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+$('#skill-modal-box')?.addEventListener('click', (e) => {
+  if (e.target.closest('[data-close-skill-modal]')) {
+    $('#skill-modal-box').hidden = true;
+    $('#skill-modal-box').innerHTML = '';
+  }
+});
+
+$('#skill-modal-box')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const btn = e.submitter;
+  if (btn) btn.disabled = true;
+  try {
+    if (form.id === 'form-skill-upload') {
+      const fd = new FormData(form);
+      const r = await api('/api/skills/upload', { method: 'POST', body: fd });
+      toast(`✓ Đã nạp thành công ${r.imported?.length || r.importedIds?.length || 1} Skill vào kho!`, 5000);
+    } else if (form.id === 'form-skill-create') {
+      const fd = new FormData(form);
+      const body = Object.fromEntries(fd.entries());
+      await api('/api/skills', { method: 'POST', body });
+      toast('✓ Đã tạo Skill mới thành công!', 4000);
+    }
+    $('#skill-modal-box').hidden = true;
+    $('#skill-modal-box').innerHTML = '';
+    await loadSkills(false);
+  } catch (err) {
+    toast(err.message, 7000);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+// Xem / Sửa chi tiết 1 Skill và các file references
+async function openSkillDetail(skillId, filePath = 'SKILL.md') {
+  const box = $('#skill-detail-box');
+  if (!box) return;
+  box.hidden = false;
+  box.innerHTML = '<div class="muted">Đang tải chi tiết Skill…</div>';
+  try {
+    const sk = await api(`/api/skills/${encodeURIComponent(skillId)}`);
+    currentDetailSkill = sk;
+    currentDetailFile = sk.files.some((f) => f.path === filePath) ? filePath : (sk.files[0]?.path || 'SKILL.md');
+    const fData = await api(`/api/skills/${encodeURIComponent(skillId)}/file?path=${encodeURIComponent(currentDetailFile)}`);
+    renderSkillDetailBox(sk, fData);
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err) {
+    box.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
+  }
+}
+
+function renderSkillDetailBox(sk, fData) {
+  const box = $('#skill-detail-box');
+  if (!box) return;
+  box.innerHTML = `
+    <div class="job-head">
+      <div class="grow">
+        <h2>📂 Chi tiết Skill: ${esc(skTitle(sk))} <code>${esc(sk.id)}</code></h2>
+        <div class="muted" style="font-size:13px">${esc(sk.description || '')}</div>
+      </div>
+      <div class="row" style="margin:0">
+        <button type="button" class="small primary" data-detail-use-video="${esc(sk.id)}">🎬 Dùng viết kịch bản</button>
+        <button type="button" class="small" data-detail-close>Đóng ✕</button>
+      </div>
+    </div>
+    <div class="skill-detail-grid">
+      <div>
+        <div style="font-size:12.5px;font-weight:700;color:var(--ink-2);margin-bottom:6px">Các file trong Skill (${sk.files.length})</div>
+        <ul class="skill-file-list">
+          ${sk.files.map((f) => `
+            <li data-detail-file="${esc(f.path)}" class="${f.path === currentDetailFile ? 'active' : ''}">
+              <span>${f.path === 'SKILL.md' ? '📘 ' : '📄 '}${esc(f.path)}</span>
+              <small class="muted">${formatBytes(f.size)}</small>
+            </li>`).join('')}
+        </ul>
+        <div style="margin-top:10px;display:grid;gap:6px">
+          <button type="button" class="small block" id="btn-detail-new-ref">＋ Tạo file references/.md mới</button>
+          <label class="small" style="margin:0;cursor:pointer;text-align:center;border:1px dashed var(--accent);border-radius:8px;padding:6px;color:var(--accent);font-weight:600">
+            ⬆ Tải thêm file vào Skill này
+            <input type="file" id="inp-detail-upload" multiple hidden>
+          </label>
+        </div>
+      </div>
+      <div>
+        <div class="row" style="margin:0 0 8px;justify-content:space-between;align-items:center">
+          <div>
+            <b>Đang xem: <code>${esc(fData.path)}</code></b>
+            <span class="muted" style="font-size:12px;margin-left:8px">${formatBytes(fData.size)}</span>
+          </div>
+          <div class="row" style="margin:0">
+            ${fData.isText ? `<button type="button" class="small primary" id="btn-detail-save-file">💾 Lưu nội dung file</button>` : ''}
+            ${fData.path !== 'SKILL.md' ? `<button type="button" class="small danger" id="btn-detail-del-file">🗑 Xoá file này</button>` : ''}
+          </div>
+        </div>
+        ${fData.isText
+          ? `<textarea id="detail-file-content" class="prompt" rows="18">${esc(fData.content || '')}</textarea>`
+          : `<div class="manual">File nhị phân / tài liệu (<code>${esc(fData.path)}</code> — ${formatBytes(fData.size)}). Khi chạy kịch bản hoặc hỏi AI, Claude sẽ dùng công cụ đọc file trực tiếp để trích xuất dữ liệu từ file này.</div>`}
+      </div>
+    </div>`;
+}
+
+$('#skill-detail-box')?.addEventListener('click', async (e) => {
+  if (e.target.closest('[data-detail-close]')) {
+    $('#skill-detail-box').hidden = true;
+    currentDetailSkill = null;
+    return;
+  }
+  const useVid = e.target.closest('[data-detail-use-video]');
+  if (useVid) {
+    const id = useVid.dataset.detailUseVideo;
+    if (!newSelectedSkills.includes(id)) newSelectedSkills.push(id);
+    syncNewSkillsInput();
+    populateSkillSelects();
+    show('new');
+    toast(`Đã gắn Skill "${id}" vào Tạo video mới!`);
+    return;
+  }
+  const fileLi = e.target.closest('[data-detail-file]');
+  if (fileLi && currentDetailSkill) {
+    await openSkillDetail(currentDetailSkill.id, fileLi.dataset.detailFile);
+    return;
+  }
+  if (e.target.closest('#btn-detail-save-file') && currentDetailSkill) {
+    const btn = e.target.closest('#btn-detail-save-file');
+    btn.disabled = true;
+    try {
+      const content = $('#detail-file-content').value;
+      await api(`/api/skills/${encodeURIComponent(currentDetailSkill.id)}/file`, {
+        method: 'PUT',
+        body: { path: currentDetailFile, content },
+      });
+      toast(`✓ Đã lưu file ${currentDetailFile}`);
+      await loadSkills(false);
+      await openSkillDetail(currentDetailSkill.id, currentDetailFile);
+    } catch (err) { toast(err.message); }
+    finally { btn.disabled = false; }
+  }
+  if (e.target.closest('#btn-detail-del-file') && currentDetailSkill) {
+    if (!confirm(`Xoá file "${currentDetailFile}" khỏi Skill này?`)) return;
+    try {
+      await api(`/api/skills/${encodeURIComponent(currentDetailSkill.id)}/file?path=${encodeURIComponent(currentDetailFile)}`, { method: 'DELETE' });
+      toast(`Đã xoá ${currentDetailFile}`);
+      await loadSkills(false);
+      await openSkillDetail(currentDetailSkill.id, 'SKILL.md');
+    } catch (err) { toast(err.message); }
+  }
+  if (e.target.closest('#btn-detail-new-ref') && currentDetailSkill) {
+    const name = prompt('Nhập tên file tài liệu mới (VD: bang-gia.md hoặc cau-hoi-thuong-gap.md):', 'tai-lieu-bo-sung.md');
+    if (!name) return;
+    const clean = name.includes('/') ? name : `references/${name.endsWith('.md') || name.includes('.') ? name : `${name}.md`}`;
+    try {
+      await api(`/api/skills/${encodeURIComponent(currentDetailSkill.id)}/file`, {
+        method: 'PUT',
+        body: { path: clean, content: `# ${name}\n\nNhập dữ liệu tham chiếu cho AI tại đây...\n` },
+      });
+      await loadSkills(false);
+      await openSkillDetail(currentDetailSkill.id, clean);
+    } catch (err) { toast(err.message); }
+  }
+});
+
+$('#skill-detail-box')?.addEventListener('change', async (e) => {
+  if (e.target.id === 'inp-detail-upload' && e.target.files?.length && currentDetailSkill) {
+    const fd = new FormData();
+    fd.append('targetSkillId', currentDetailSkill.id);
+    for (const f of e.target.files) fd.append('files', f);
+    toast('Đang tải file bổ sung vào Skill…');
+    try {
+      await api('/api/skills/upload', { method: 'POST', body: fd });
+      toast('✓ Đã thêm file vào Skill!');
+      await loadSkills(false);
+      await openSkillDetail(currentDetailSkill.id, currentDetailFile);
+    } catch (err) { toast(err.message); }
+  }
+});
+
+// Thao tác trên từng thẻ Skill trong danh sách #skills-grid
+$('#skills-grid')?.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-sk-act]');
+  if (!b) return;
+  const card = b.closest('[data-skill-id]');
+  if (!card) return;
+  const id = card.dataset.skillId;
+  const sk = skillsList.find((s) => s.id === id);
+  const act = b.dataset.skAct;
+  try {
+    if (act === 'use-video') {
+      if (!newSelectedSkills.includes(id)) newSelectedSkills.push(id);
+      syncNewSkillsInput();
+      populateSkillSelects();
+      show('new');
+      toast(`Đã gắn Skill "${sk?.name || id}" — bạn có thể bấm "✨ AI trích dữ liệu từ Skill vào form" hoặc nhập chủ đề để viết kịch bản!`, 5000);
+    } else if (act === 'use-ask') {
+      if (!askSelectedSkills.includes(id)) askSelectedSkills.push(id);
+      populateSkillSelects();
+      $('.skill-runner-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $('#ask-skill-prompt')?.focus();
+      toast(`Đã nạp "${sk?.name || id}" vào khung Chạy AI!`);
+    } else if (act === 'detail') {
+      await openSkillDetail(id, 'SKILL.md');
+    } else if (act === 'pin') {
+      await api(`/api/skills/${encodeURIComponent(id)}`, { method: 'PATCH', body: { pinned: !sk?.pinned } });
+      toast(!sk?.pinned ? `📌 Đã ghim "${sk?.name || id}" — AI sẽ luôn đọc Skill này khi viết kịch bản` : `Đã bỏ ghim "${sk?.name || id}"`);
+      await loadSkills(false);
+    } else if (act === 'delete') {
+      if (!confirm(`Xoá Skill "${sk?.name || id}" (${id}) khỏi kho?`)) return;
+      await api(`/api/skills/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      newSelectedSkills = newSelectedSkills.filter((x) => x !== id);
+      askSelectedSkills = askSelectedSkills.filter((x) => x !== id);
+      if (currentDetailSkill?.id === id) $('#skill-detail-box').hidden = true;
+      toast(`Đã xoá Skill "${id}"`);
+      await loadSkills(false);
+    }
   } catch (err) {
     toast(err.message);
   }
@@ -990,13 +1678,14 @@ $('#view-job').addEventListener('change', async (e) => {
     <span class="pill" id="pill-cl">Claude…</span>
     <span class="pill" id="pill-flow">Flow…</span>
     <span class="pill" id="pill-fb">Facebook…</span>`;
-  await Promise.all([loadFb(), loadChromeStatus()]);
+  await Promise.all([loadFb(), loadChromeStatus(), loadSkills(false)]);
   loadClaude(); // không chờ: kiểm tra tài khoản Claude mất vài giây
   durHint();
   await loadList();
   // Người dùng đã tự chuyển tab trong lúc trang đang tải → không tự mở video đầu tiên đè lên.
-  if (!$('#view-posts').hidden || !$('#view-accounts').hidden || currentId) return;
+  if (!$('#view-posts').hidden || !$('#view-accounts').hidden || !$('#view-skills').hidden || currentId) return;
   const first = $('#job-list li[data-id]');
   if (first) openJob(first.dataset.id);
   else show('new');
 })();
+

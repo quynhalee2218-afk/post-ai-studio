@@ -15,12 +15,15 @@ import * as FBC from './lib/fb-chrome.js';
 import * as FBB from './lib/fb-browser.js';
 import { FLOW_MODELS } from './lib/flow-auto.js';
 import * as J from './lib/jobs.js';
+import * as SK from './lib/skills.js';
+import { extractBriefFromSkills, askWithSkills } from './lib/llm.js';
 
 fs.mkdirSync(path.join(config.dataDir, 'uploads'), { recursive: true });
+SK.initSkills();
 J.loadAll();
 
 const app = express();
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(config.root, 'public')));
 // File của từng job (clip, khung hình, video cuối) — chỉ phục vụ trong thư mục data/jobs.
 app.use('/files', express.static(path.join(config.dataDir, 'jobs'), { index: false, dotfiles: 'deny' }));
@@ -29,6 +32,11 @@ const upload = multer({
   dest: path.join(config.dataDir, 'uploads'),
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
+});
+
+const uploadSkillFiles = multer({
+  dest: path.join(config.dataDir, 'uploads'),
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
 // Clip mp4 người dùng tải về từ Flow (thường 5–30MB / 8 giây).
@@ -116,6 +124,16 @@ app.post('/api/jobs', upload.single('refImage'), wrap(async (req, res) => {
     await toCleanJpg(req.file.path, ref);
     fs.rmSync(req.file.path, { force: true });
   }
+  let skills = [];
+  if (Array.isArray(b.skills)) skills = b.skills.map(String).filter(Boolean);
+  else if (typeof b.skills === 'string' && b.skills.trim()) {
+    try {
+      const parsed = JSON.parse(b.skills);
+      skills = Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [String(b.skills).trim()];
+    } catch {
+      skills = b.skills.split(',').map((x) => x.trim()).filter(Boolean);
+    }
+  }
   const input = {
     topic: b.topic.trim(),
     sceneCount,
@@ -128,6 +146,7 @@ app.post('/api/jobs', upload.single('refImage'), wrap(async (req, res) => {
     flowModel: FLOW_MODELS.includes(b.flowModel) ? b.flowModel : 'Veo 3.1 - Fast',
     consistency: b.consistency === 'frames' ? 'frames' : 'identity',
     voice: isVoice(b.voice) ? b.voice : null,
+    skills,
   };
   const job = await J.createJob(input, ref);
   res.json({ id: job.id });
@@ -221,6 +240,27 @@ app.post('/api/claude/login/start', wrap(async (_req, res) => res.json(await CA.
 app.post('/api/claude/login/code', wrap(async (req, res) => res.json(await CA.submitCode(String(req.body?.sessionId || ''), req.body?.code))));
 app.post('/api/claude/login/cancel', (req, res) => { CA.cancelLogin(String(req.body?.sessionId || '')); res.json({ ok: true }); });
 app.post('/api/claude/logout', wrap(async (req, res) => { await CA.logout(String(req.body?.id || '')); res.json({ ok: true }); }));
+
+// ---------- Kho Skill AI (đồng bộ từ Claude, tải lên, trích xuất dữ liệu & chạy yêu cầu AI) ----------
+app.get('/api/skills', wrap(async (_req, res) => res.json(SK.listSkills())));
+app.post('/api/skills/sync', wrap(async (_req, res) => res.json(SK.syncFromClaude())));
+app.post('/api/skills/upload', uploadSkillFiles.array('files', 30), wrap(async (req, res) => {
+  res.json(await SK.importUploadedFiles({
+    files: req.files || [],
+    targetSkillId: req.body?.targetSkillId || '',
+    name: req.body?.name || '',
+    description: req.body?.description || '',
+  }));
+}));
+app.post('/api/skills/extract-brief', wrap(async (req, res) => res.json(await extractBriefFromSkills(req.body || {}))));
+app.post('/api/skills/ask', wrap(async (req, res) => res.json(await askWithSkills(req.body || {}))));
+app.post('/api/skills', wrap(async (req, res) => res.json(SK.saveSkill(req.body || {}))));
+app.get('/api/skills/:id', wrap(async (req, res) => res.json(SK.getSkill(req.params.id))));
+app.patch('/api/skills/:id', wrap(async (req, res) => res.json(SK.patchSkillMeta(req.params.id, req.body || {}))));
+app.delete('/api/skills/:id', wrap(async (req, res) => res.json(SK.deleteSkill(req.params.id))));
+app.get('/api/skills/:id/file', wrap(async (req, res) => res.json(SK.readSkillFile(req.params.id, String(req.query.path || 'SKILL.md')))));
+app.put('/api/skills/:id/file', wrap(async (req, res) => res.json(SK.writeSkillFile(req.params.id, req.body?.path, req.body?.content))));
+app.delete('/api/skills/:id/file', wrap(async (req, res) => res.json(SK.deleteSkillFile(req.params.id, String(req.query.path || req.body?.path || '')))));
 
 // ---------- Lịch đăng ----------
 app.get('/api/posts', (_req, res) => res.json(P.listPosts()));

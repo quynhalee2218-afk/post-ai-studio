@@ -16,7 +16,7 @@
     <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9zM19 14l.95 2.55L22.5 17.5l-2.55.95L19 21l-.95-2.55L15.5 17.5l2.55-.95z"/></svg></span>
     <span>Post AI <b>Studio</b></span>
   </div>
-  <nav class="tabs"><button id="tab-videos" class="tab active">Video</button><button id="tab-posts" class="tab">Lịch đăng</button><button id="tab-accounts" class="tab">Tài khoản</button></nav>
+  <nav class="tabs"><button id="tab-videos" class="tab active">Video</button><button id="tab-skills" class="tab">Skill AI</button><button id="tab-posts" class="tab">Lịch đăng</button><button id="tab-accounts" class="tab">Tài khoản</button></nav>
   <div id="status-pills" class="pills"></div>
 </header>
 
@@ -34,11 +34,31 @@
       <div class="hero">
         <span class="eyebrow">✦ AI viết kịch bản</span>
         <h1>Video quảng cáo mới</h1>
-        <p class="muted">Claude viết kịch bản nhiều phân cảnh theo skill Video AI. Bạn duyệt và sửa prompt trước khi tạo video trên Flow.</p>
+        <p class="muted">Claude đọc hiểu kiến thức từ kho Skill AI bạn chọn (kèm chuẩn kỹ thuật Video AI) để trích xuất dữ liệu và viết kịch bản nhiều phân cảnh.</p>
       </div>
       <form id="form-new" class="grid-form">
+        <div class="full skill-pick-box">
+          <div class="skill-pick-head">
+            <div>
+              <span class="field-label">📚 Skill kiến thức & kịch bản áp dụng</span>
+              <small class="muted">Chọn 1 hoặc nhiều Skill (từ Claude đồng bộ sang hoặc bạn tải lên) để AI đọc hiểu nhân vật, sản phẩm, công thức kịch bản.</small>
+            </div>
+            <div class="row" style="margin:0">
+              <button type="button" class="small" id="btn-extract-skill" title="AI đọc Skill đang chọn và tự điền Chủ đề, Nhân vật, Tông giọng, Thông tin sản phẩm vào form">✨ AI trích dữ liệu từ Skill vào form</button>
+              <button type="button" class="small" data-goto-skills>Quản lý kho Skill →</button>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <select id="new-skill-select" style="flex:1;min-width:240px">
+              <option value="">＋ Chọn thêm Skill từ kho để gắn vào kịch bản…</option>
+            </select>
+          </div>
+          <div id="new-skill-tags" class="skill-tags"></div>
+          <div id="new-skill-topics" class="skill-topics" hidden></div>
+          <input type="hidden" name="skills" id="new-skills-input" value="[]">
+        </div>
         <label class="full">Chủ đề / sản phẩm / dịch vụ *
-          <textarea name="topic" rows="3" required placeholder="VD: Khóa học AI cho chủ doanh nghiệp nhỏ, học 4 tuần, làm được trợ lý AI riêng"></textarea>
+          <textarea name="topic" rows="3" required placeholder="VD: Khóa học AI cho chủ doanh nghiệp nhỏ, học 4 tuần, làm được trợ lý AI riêng (hoặc bấm ✨ AI trích dữ liệu từ Skill để gợi ý chủ đề)"></textarea>
         </label>
         <div class="field">
           <span class="field-label">Số cảnh <small class="muted" style="display:inline">· 8 giây/cảnh</small></span>
@@ -100,6 +120,70 @@
 
     <!-- Chi tiết job -->
     <section id="view-job" hidden></section>
+
+    <!-- Kho Skill AI -->
+    <section id="view-skills" hidden>
+      <div class="card">
+        <div class="job-head">
+          <div class="grow">
+            <span class="eyebrow">✦ Kho tri thức & Kỹ năng AI</span>
+            <h1>Skill AI & Đồng bộ từ Claude</h1>
+            <div class="muted">Đẩy các Skill của bạn lên (file <code>.zip</code>, <code>SKILL.md</code>, tài liệu <code>references/</code>) hoặc đồng bộ trực tiếp toàn bộ Skill từ tài khoản Claude trên máy. Model AI sẽ đọc hiểu kiến thức và trích dữ liệu từ Skill để viết kịch bản video cũng như xử lý các yêu cầu khác.</div>
+          </div>
+          <div class="row" style="margin:0">
+            <button id="btn-skill-sync" class="primary">↻ Đồng bộ từ Claude</button>
+            <button id="btn-skill-upload-open">⬆ Đẩy file / .zip Skill lên</button>
+            <button id="btn-skill-new-open">＋ Tạo Skill mới</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <input id="skill-search" type="search" placeholder="🔍 Tìm kiếm Skill theo tên, mã hoặc mô tả (VD: veo3, trà an nhiên, dna, taki, đạo lý…)" style="flex:1;min-width:260px">
+          <div class="chips" id="skill-filter-chips">
+            <button type="button" data-cat="all" class="on">Tất cả</button>
+            <button type="button" data-cat="video">🎬 Video / Veo3</button>
+            <button type="button" data-cat="dna">🧬 DNA / Nhân hiệu</button>
+            <button type="button" data-cat="content">✍️ Content / Marketing</button>
+            <button type="button" data-cat="pinned">📌 Đã ghim</button>
+            <button type="button" data-cat="upload">⬆ Đẩy lên</button>
+          </div>
+        </div>
+        <div id="skill-stats" class="muted" style="font-size:13px;margin-top:8px"></div>
+      </div>
+
+      <!-- Khung tải lên / tạo mới Skill (ẩn mặc định) -->
+      <div id="skill-modal-box" class="card" hidden></div>
+
+      <!-- Khung xem / sửa chi tiết 1 Skill và các file references (ẩn mặc định) -->
+      <div id="skill-detail-box" class="card" hidden></div>
+
+      <!-- Khung chạy AI với Skill (làm kịch bản & các yêu cầu khác) -->
+      <div class="card skill-runner-card">
+        <h2>✦ Chạy Model AI với Skill (Làm kịch bản, trích dữ liệu & yêu cầu khác)</h2>
+        <p class="muted" style="margin:-6px 0 12px;font-size:13.5px">Chọn 1 hoặc nhiều Skill bên dưới, sau đó yêu cầu AI trích xuất dữ liệu, gợi ý chủ đề, lên kế hoạch nội dung, soạn kịch bản hoặc xử lý công việc theo đúng kiến thức trong Skill.</p>
+        <div class="row" style="margin-top:0">
+          <select id="ask-skill-select" style="flex:1;min-width:240px">
+            <option value="">＋ Chọn thêm Skill để nạp cho AI…</option>
+          </select>
+        </div>
+        <div id="ask-skill-tags" class="skill-tags" style="margin-top:8px"></div>
+        <div class="chips" id="ask-quick-prompts" style="margin-top:10px">
+          <button type="button" data-q="Đọc kỹ Skill và gợi ý cho tôi 8 chủ đề kịch bản video viral cụ thể kèm Hook mở đầu hấp dẫn nhất.">💡 Gợi ý 8 chủ đề + Hook viral</button>
+          <button type="button" data-q="Trích xuất đầy đủ hồ sơ từ Skill: (1) Nhân vật cố định / Character DNA, (2) Đối tượng xem, (3) Tông giọng, (4) Thông tin sản phẩm/chính sách bắt buộc, (5) Điều cấm và CTA chuẩn.">🧬 Trích xuất Nhân vật & Dữ liệu</button>
+          <button type="button" data-q="Dựa trên kiến thức và công thức trong Skill, hãy viết 1 kịch bản chi tiết hoàn chỉnh (chia phân cảnh, lời thoại, bối cảnh) cho chủ đề nổi bật nhất của Skill.">🎬 Viết kịch bản chi tiết từ Skill</button>
+          <button type="button" data-q="Tóm tắt các quy tắc cốt lõi, công thức và dữ liệu quan trọng nhất có trong Skill và các file references đính kèm.">📋 Tóm tắt kiến thức trong Skill</button>
+        </div>
+        <label style="margin-top:10px">Yêu cầu của bạn dành cho AI (AI sẽ đọc hiểu các Skill đã chọn + file <code>references/</code> đính kèm)
+          <textarea id="ask-skill-prompt" rows="3" placeholder="VD: Dựa vào skill này, hãy viết kịch bản 6 cảnh về chủ đề... hoặc trích dữ liệu sản phẩm / soạn tin nhắn trả lời học viên..."></textarea>
+        </label>
+        <div class="row">
+          <button id="btn-ask-skill" class="primary">✦ Chạy AI theo Skill</button>
+          <span id="ask-skill-status" class="muted" style="font-size:13px"></span>
+        </div>
+        <div id="ask-skill-result" hidden></div>
+      </div>
+
+      <div id="skills-grid" class="skills-grid"></div>
+    </section>
 
     <section id="view-posts" hidden>
       <div class="card">
