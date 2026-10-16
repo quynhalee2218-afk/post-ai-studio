@@ -67,11 +67,14 @@ function aiModelOpts(selectedVal = '') {
     </optgroup>`).join('');
 }
 
+let currentNewAiProvider = 'claude';
+
 function updateNewAiModelUI() {
   const selEl = $('#new-ai-model-select');
   if (!selEl) return;
   const val = selEl.value || cfg.defaultAi?.combined || 'claude:claude-sonnet-4-5';
   const provId = val.split(':')[0] || 'claude';
+  currentNewAiProvider = provId;
   for (const btn of document.querySelectorAll('#new-ai-provider-chips button[data-ai-prov]')) {
     btn.classList.toggle('on', btn.dataset.aiProv === provId);
   }
@@ -1201,8 +1204,9 @@ async function loadAiAccounts() {
   // Ô chọn Model AI mặc định trong tab Tài khoản
   const defSel = $('#default-ai-select');
   if (defSel) {
-    const curDef = st.defaultAi?.model || st.defaultAi?.provider || 'claude';
+    const curDef = st.defaultAi?.combined || st.defaultAi?.model || 'claude:claude-sonnet-4-5';
     defSel.innerHTML = aiModelOpts(curDef);
+    defSel.value = curDef;
   }
 
   // Khung ChatGPT (#gpt-box)
@@ -1282,12 +1286,13 @@ async function loadAiAccounts() {
 
 $('#default-ai-select')?.addEventListener('change', async (e) => {
   const aiModel = e.target.value;
+  const chosenLabel = e.target.options[e.target.selectedIndex]?.text || aiModel;
   if (!aiModel) return;
   try {
-    const r = await api('/api/ai/settings', { method: 'POST', body: { defaultAiModel: aiModel } });
-    cfg.defaultAi = r.defaultAi;
-    populateAiModelSelects();
-    toast(`Đã đặt Model AI mặc định: ${e.target.options[e.target.selectedIndex]?.text || aiModel}`);
+    const r = await api('/api/ai/settings', { method: 'POST', body: { defaultAiModel: aiModel, aiSelection: aiModel } });
+    cfg.defaultAi = r.defaultAi || r.defaultSelection || cfg.defaultAi;
+    populateAiModelSelects(false);
+    toast(`✓ Đã đặt Model AI mặc định: ${r.defaultAi ? `${r.defaultAi.providerIcon} ${r.defaultAi.modelName}` : chosenLabel}`);
   } catch (err) {
     toast(err.message);
   }
