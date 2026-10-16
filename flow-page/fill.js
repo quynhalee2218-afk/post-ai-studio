@@ -216,3 +216,63 @@ async function fill(p, model) {
   status('Đang điền prompt…');
   await setPrompt(p.prompt);
 }
+
+// Kiểm tra nút "Bắt đầu tạo" hoặc cảnh báo hết tín dụng Google Flow trước khi bấm tạo.
+// Nếu model hiện tại (10–12 tín dụng) báo thiếu tín dụng, tự thử hạ xuống "Veo 3.1 - Lite" (5 tín dụng).
+async function checkReadyToCreate(currentModel) {
+  await sleep(400);
+  const findStartBtn = () => document.querySelector('button[aria-label="Bắt đầu tạo"], button[aria-label="Create"], button[aria-label="Generate"]');
+  const findWarnBtn = () => document.querySelector('button[aria-label="Cảnh báo về việc không đủ tín dụng"], button.prompt-warning-button');
+
+  let startBtn = findStartBtn();
+  if (startBtn && visible(startBtn) && !startBtn.disabled) {
+    return { ok: true, model: currentModel };
+  }
+
+  let warnBtn = findWarnBtn();
+  if (warnBtn && visible(warnBtn) && currentModel !== 'Veo 3.1 - Lite') {
+    status('Không đủ tín dụng cho ' + currentModel + ' — đang thử hạ xuống Veo 3.1 - Lite (5 tín dụng)…');
+    try {
+      const btn = await openSettings();
+      await pickModel('Veo 3.1 - Lite');
+      if (byText('button[role=radio]', '9:16')) press(btn);
+      await sleep(600);
+      startBtn = findStartBtn();
+      if (startBtn && visible(startBtn) && !startBtn.disabled) {
+        return { ok: true, model: 'Veo 3.1 - Lite', downgradedFrom: currentModel };
+      }
+    } catch {}
+  }
+
+  warnBtn = findWarnBtn();
+  if (warnBtn && visible(warnBtn)) {
+    const email = [...document.querySelectorAll('[aria-label]')]
+      .map((e) => e.getAttribute('aria-label'))
+      .find((t) => t && t.includes('@'))?.match(/\(([^)]+@[^)]+)\)/)?.[1] || null;
+
+    let creditsLeft = null;
+    try {
+      const accDiv = document.querySelector('[aria-label="Thông tin về tài khoản"]');
+      if (accDiv) {
+        press(accDiv);
+        await sleep(600);
+        const ovText = document.querySelector('.cdk-overlay-container')?.innerText || document.body.innerText || '';
+        const m = ovText.match(/(\d+)\s*tín dụng Google Flow/i) || ovText.match(/(\d+)\s*Google Flow credit/i);
+        if (m) creditsLeft = Number(m[1]);
+        document.body.click();
+        await sleep(250);
+      }
+    } catch {}
+
+    return {
+      ok: false,
+      outOfCredit: true,
+      email,
+      creditsLeft,
+      requiredCredits: 5,
+    };
+  }
+
+  return { ok: Boolean(startBtn && visible(startBtn)), model: currentModel };
+}
+

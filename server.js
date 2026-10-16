@@ -208,7 +208,13 @@ app.post('/api/jobs/:id/auto', action((job, b) => J.startAutoFlow(job, { from: b
 
 // ---------- Chrome Flow (tự động hoàn toàn) ----------
 app.get('/api/flow/status', wrap(async (_req, res) => res.json(await FC.status())));
-app.post('/api/flow/sync', wrap(async (req, res) => { const s = await FC.syncProfile(String(req.body?.dir || '')); await FC.ensure({ show: true }); const login = await FC.checkLogin().catch(() => null); res.json({ ...s, login }); }));
+app.post('/api/flow/sync', wrap(async (req, res) => {
+  const s = await FC.syncProfile(String(req.body?.dir || ''));
+  await FC.ensure({ show: true });
+  const login = await FC.checkLogin({ switchToSourceEmail: true }).catch(() => null);
+  res.json({ ...s, login });
+}));
+app.post('/api/flow/switch-account', wrap(async (req, res) => res.json(await FC.switchAccount(String(req.body?.email || '')))));
 app.post('/api/flow/show', wrap(async (req, res) => { await FC.ensure({ show: req.body?.show !== false }); res.json({ ok: true }); }));
 app.post('/api/flow/check', wrap(async (_req, res) => res.json(await FC.checkLogin())));
 app.post('/api/flow/close', wrap(async (_req, res) => { await FC.close(); res.json({ ok: true }); }));

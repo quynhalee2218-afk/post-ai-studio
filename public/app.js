@@ -607,7 +607,7 @@ function renderJob(job) {
           <div class="dialogue">🎙 ${esc(sc.dialogue)}</div>
           ${overlayEditor(sc, i, locked)}
           ${sc.stale ? `<div class="error-box" style="color:var(--warn)">Cảnh trước đã được tạo lại nên khung đầu cảnh này không còn khớp. Nên tạo lại từ cảnh này.</div>` : ''}
-          ${sc.error ? `<div class="error-box">${esc(sc.error)}</div>` : ''}
+          ${sc.error ? `<div class="error-box">${esc(sc.error)}${/tín dụng|Bắt đầu tạo/i.test(sc.error) ? `<div class="row" style="margin-top:8px"><button type="button" class="small primary" data-goto-accounts>🔄 Mở Tài khoản → Đổi tài khoản Google Flow khác</button></div>` : ''}</div>` : ''}
           <details ${sc.clip ? '' : 'open'}><summary>Prompt Flow (sửa được, tự lưu khi rời ô) ·
             <span class="${sc.prompt.length > LIMIT ? 'over' : ''}" data-count="${i}">${sc.prompt.length}/${LIMIT} ký tự</span></summary>
             <textarea class="prompt" rows="14" data-field="prompt" data-i="${i}" ${locked ? 'disabled' : ''}>${esc(sc.prompt)}</textarea>
@@ -921,11 +921,16 @@ function setFbc(st) {
 function setFlowPill(st) {
   const pill = $('#pill-flow');
   if (!pill) return;
-  const ok = Boolean(st?.loggedIn);
+  const ok = Boolean(st?.loggedIn) && !st?.outOfCredit;
   pill.className = `pill ${ok ? 'ok' : 'bad'}`;
-  pill.textContent = ok
-    ? `Flow: ${st.source?.email || st.source?.name || 'đã đăng nhập'}`
-    : st?.source ? `Flow: chờ đăng nhập (${st.source.email || st.source.name})` : 'Flow chưa sẵn sàng';
+  const email = st?.activeEmail || st?.source?.email || st?.source?.name || 'đã đăng nhập';
+  if (st?.loggedIn && st?.outOfCredit) {
+    pill.textContent = `Flow: ${email} (⚠️ Hết credit: còn ${st.creditsLeft ?? '<5'})`;
+  } else if (st?.loggedIn) {
+    pill.textContent = `Flow: ${email}${st.creditsLeft != null ? ` (${st.creditsLeft} credit)` : ''}`;
+  } else {
+    pill.textContent = st?.source ? `Flow: chờ đăng nhập (${st.source.email || st.source.name})` : 'Flow chưa sẵn sàng';
+  }
 }
 async function loadChromeStatus() {
   const [f, b] = await Promise.all([api('/api/flow/status').catch(() => null), api('/api/fbchrome/status').catch(() => null)]);
@@ -936,8 +941,10 @@ async function loadChromeStatus() {
 // Hộp quản lý "Chrome riêng" (chép profile, hiện/ẩn, kiểm tra đăng nhập) — dùng cho Chrome Flow và Chrome Facebook.
 const CHROMES = {
   flow: { box: '#chromeflow-box', api: '/api/flow', name: 'Chrome Flow', site: 'Flow', checkLabel: 'Kiểm tra đăng nhập Flow',
-    ok: (r) => `✓ Chrome Flow đã vào được Google Flow${r.email ? ` bằng <b>${esc(r.email)}</b>` : ''}. Sẵn sàng tự động tạo video!`,
-    bad: (r) => `Cửa sổ <b>Chrome Flow</b> đã bật lên trên màn hình ở trang đăng nhập Google — hãy nhập mật khẩu <b>1 lần duy nhất</b> trong cửa sổ đó rồi bấm lại <b>Kiểm tra đăng nhập Flow</b>.` },
+    ok: (r) => r.outOfCredit
+      ? `⚠️ Chrome Flow đã vào Google Flow bằng <b>${esc(r.email || 'tài khoản hiện tại')}</b> nhưng chỉ còn <b>${r.creditsLeft ?? 'dưới 5'} tín dụng</b> (không đủ tạo video). Hãy bấm <b>🔄 Đổi tài khoản Google khác</b> hoặc chọn profile khác ở trên!`
+      : `✓ Chrome Flow đã vào được Google Flow${r.email ? ` bằng <b>${esc(r.email)}</b>` : ''}${r.creditsLeft != null ? ` (còn <b>${r.creditsLeft} tín dụng</b>)` : ''}. Sẵn sàng tự động tạo video!`,
+    bad: (r) => `Cửa sổ <b>Chrome Flow</b> đã bật lên trên màn hình ở trang chọn/đăng nhập tài khoản Google${r?.switchingTo ? ` (<b>${esc(r.switchingTo)}</b>)` : ''} — hãy chọn tài khoản hoặc nhập mật khẩu trong cửa sổ đó rồi bấm lại <b>Kiểm tra đăng nhập Flow</b>.` },
   fb: { box: '#chromefb-box', api: '/api/fbchrome', name: 'Chrome Facebook', site: 'Facebook', checkLabel: 'Kiểm tra đăng nhập Facebook',
     ok: (r) => `✓ Chrome Facebook đã đăng nhập${r.name ? ` (<b>${esc(r.name)}</b>)` : ''}${r.page ? ` và mở được Business Suite của Page <b>${esc(r.page)}</b>` : ''}. Sẵn sàng đăng.`,
     bad: (r) => `${esc(r.reason || 'Chưa đăng nhập Facebook')}. Bấm <b>Hiện cửa sổ</b>, tự đăng nhập Facebook (tài khoản quản trị Page) trong cửa sổ Chrome Facebook, rồi kiểm tra lại.`,
@@ -960,19 +967,26 @@ async function loadChromeBox(kind, extra = '') {
   let st;
   try { st = await api(`${c.api}/status`); } catch (e) { box.textContent = e.message; return; }
   const src = st.source;
+  const activeEmail = st.activeEmail || src?.email || '';
+  const creditBadge = kind === 'flow' && st.loggedIn && st.creditsLeft != null
+    ? ` · Tín dụng Flow: <b style="color:${st.outOfCredit ? '#dc2626' : '#047857'}">${st.creditsLeft} tín dụng${st.outOfCredit ? ' (⚠️ Không đủ tạo video)' : ''}</b>`
+    : '';
   const statusLine = kind === 'flow'
     ? (st.loggedIn
-      ? `<b style="color:var(--ok)">✓ Đã đăng nhập Google Flow</b>`
-      : st.up ? `<b style="color:#d97706">đang mở — chờ bạn đăng nhập Google trong cửa sổ Chrome Flow</b>` : `<b style="color:var(--muted)">chưa mở</b>`)
+      ? `<b style="color:${st.outOfCredit ? '#dc2626' : 'var(--ok)'}">${st.outOfCredit ? '⚠️ Đã đăng nhập nhưng HẾT TÍN DỤNG' : '✓ Đã đăng nhập Google Flow'}</b>`
+      : st.up ? `<b style="color:#d97706">đang mở — chờ bạn chọn/đăng nhập Google trong cửa sổ Chrome Flow</b>` : `<b style="color:var(--muted)">chưa mở</b>`)
     : `<b style="color:${st.up ? 'var(--ok)' : 'var(--muted)'}">${st.up ? 'đang chạy' : 'chưa mở'}</b>`;
   const autoWarn = kind === 'flow' && st.up && !st.loggedIn && !extra
-    ? `<div class="error-box" style="margin:0">Cửa sổ <b>Chrome Flow</b> riêng đã mở trên màn hình ở trang <b>Đăng nhập - Tài khoản Google</b> (điền sẵn <b>${esc(src?.email || '')}</b>). Hãy nhập mật khẩu <b>1 lần duy nhất</b> trong cửa sổ đó rồi bấm <b>Kiểm tra đăng nhập Flow</b>.</div>`
-    : '';
+    ? `<div class="error-box" style="margin:0">Cửa sổ <b>Chrome Flow</b> riêng đã mở trên màn hình ở trang <b>Chọn / Đăng nhập Tài khoản Google</b>${src?.email ? ` (điền sẵn <b>${esc(src.email)}</b>)` : ''}. Hãy chọn tài khoản hoặc nhập mật khẩu trong cửa sổ đó rồi bấm <b>Kiểm tra đăng nhập Flow</b>.</div>`
+    : (kind === 'flow' && st.loggedIn && st.outOfCredit && !extra
+      ? `<div class="error-box" style="margin:0">⚠️ Tài khoản Google Flow <b>${esc(activeEmail)}</b> hiện chỉ còn <b>${st.creditsLeft ?? 'dưới 5'} tín dụng</b> (cần tối thiểu <b>5 tín dụng/cảnh</b> cho Veo 3.1 - Lite hoặc <b>10 tín dụng/cảnh</b> cho Veo 3.1 - Fast).<br>👉 Hãy chọn tài khoản khác ở danh sách bên dưới rồi bấm <b>Chọn & đổi tài khoản</b>, hoặc bấm <b>🔄 Đổi tài khoản Google khác</b> để đăng nhập Gmail khác còn credit!</div>`
+      : '');
   box.innerHTML = `
-    <div>Trạng thái: ${statusLine}${src ? ` · tài khoản: <b>${esc(src.name)}</b>${src.email ? ` (${esc(src.email)})` : ''}` : ' · chưa chọn tài khoản'}</div>
+    <div>Trạng thái: ${statusLine}${src ? ` · tài khoản đang dùng: <b>${esc(activeEmail || src.name)}</b>` : ' · chưa chọn tài khoản'}${creditBadge}</div>
     <div class="row" style="margin-top:0">
-      <select data-cb="profile" style="width:auto;max-width:100%">${st.profiles.map((p) => `<option value="${esc(p.dir)}" ${src?.dir === p.dir ? 'selected' : ''}>${esc(p.name)}${p.email ? ` — ${esc(p.email)}` : ''}</option>`).join('')}</select>
-      <button class="small primary" data-cb="sync">${src ? 'Chọn & mở' : 'Chọn profile & mở'}</button>
+      <select data-cb="profile" style="width:auto;max-width:100%">${st.profiles.map((p) => `<option value="${esc(p.dir)}" ${(activeEmail && p.email === activeEmail) || (!activeEmail && src?.dir === p.dir) ? 'selected' : ''}>${esc(p.name)}${p.email ? ` — ${esc(p.email)}` : ''}</option>`).join('')}</select>
+      <button class="small primary" data-cb="sync">${src ? 'Chọn & đổi tài khoản' : 'Chọn profile & mở'}</button>
+      ${kind === 'flow' ? '<button class="small" data-cb="switch-account" title="Mở trang Chọn / Thêm tài khoản Google khác trong Chrome Flow">🔄 Đổi tài khoản Google khác</button>' : ''}
     </div>
     ${src ? `<div class="row" style="margin-top:0">
       <button class="small" data-cb="show">Hiện cửa sổ</button><button class="small" data-cb="hide">Ẩn sang mép</button>
@@ -1007,9 +1021,16 @@ for (const [kind, c] of Object.entries(CHROMES)) {
         b.textContent = 'Đang mở…';
         const r = await api(`${c.api}/sync`, { method: 'POST', body: { dir: box.querySelector('[data-cb=profile]').value } });
         const msg = r.login?.ok
-          ? `<div class="dialogue" style="margin:0;color:#047857">${c.ok(r.login)}</div>`
+          ? `<div class="${r.login.outOfCredit ? 'error-box' : 'dialogue'}" style="margin:0;${r.login.outOfCredit ? '' : 'color:#047857'}">${c.ok(r.login)}</div>`
           : `<div class="error-box" style="margin:0">${c.bad(r.login || { url: '' })}</div>`;
         return loadChromeBox(kind, msg);
+      }
+      if (act === 'switch-account') {
+        b.textContent = 'Đang mở chọn tài khoản…';
+        const selOpt = box.querySelector('[data-cb=profile]')?.selectedOptions?.[0]?.textContent || '';
+        const emailMatch = selOpt.match(/—\s*([^\s]+@[^\s]+)/);
+        await api(`${c.api}/switch-account`, { method: 'POST', body: { email: emailMatch ? emailMatch[1] : '' } });
+        return loadChromeBox(kind, `<div class="error-box" style="margin:0">Cửa sổ <b>Chrome Flow</b> đã bật lên ở trang <b>Chọn / Thêm tài khoản Google</b>. Hãy chọn tài khoản Google còn tín dụng Flow (hoặc đăng nhập tài khoản mới), sau đó bấm <b>Kiểm tra đăng nhập Flow</b>!</div>`);
       }
       if (act === 'show' || act === 'hide') { await api(`${c.api}/show`, { method: 'POST', body: { show: act === 'show' } }); return loadChromeBox(kind); }
       if (act === 'close') { await api(`${c.api}/close`, { method: 'POST' }); return loadChromeBox(kind); }
@@ -1021,7 +1042,7 @@ for (const [kind, c] of Object.entries(CHROMES)) {
       if (act === 'check') {
         b.textContent = `Đang mở ${c.site}…`;
         const r = await api(`${c.api}/check`, { method: 'POST' });
-        return loadChromeBox(kind, r.ok ? `<div class="dialogue" style="margin:0;color:#047857">${c.ok(r)}</div>` : `<div class="error-box" style="margin:0">${c.bad(r)}</div>`);
+        return loadChromeBox(kind, r.ok ? `<div class="${r.outOfCredit ? 'error-box' : 'dialogue'}" style="margin:0;${r.outOfCredit ? '' : 'color:#047857'}">${c.ok(r)}</div>` : `<div class="error-box" style="margin:0">${c.bad(r)}</div>`);
       }
     } catch (err) {
       toast(err.message, 8000);
