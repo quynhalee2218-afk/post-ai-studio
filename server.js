@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import * as FB from './lib/fb-auth.js';
 import * as P from './lib/posts.js';
 import * as CA from './lib/claude-accounts.js';
+import * as GA from './lib/gemini-accounts.js';
 import { VOICES, isVoice } from './lib/voices.js';
 import * as FC from './lib/flow-chrome.js';
 import * as FBC from './lib/fb-chrome.js';
@@ -260,6 +261,15 @@ app.post('/api/claude/login/start', wrap(async (_req, res) => res.json(await CA.
 app.post('/api/claude/login/code', wrap(async (req, res) => res.json(await CA.submitCode(String(req.body?.sessionId || ''), req.body?.code))));
 app.post('/api/claude/login/cancel', (req, res) => { CA.cancelLogin(String(req.body?.sessionId || '')); res.json({ ok: true }); });
 app.post('/api/claude/logout', wrap(async (req, res) => { await CA.logout(String(req.body?.id || '')); res.json({ ok: true }); }));
+
+// ---------- Tài khoản Gemini (Google OAuth + API Key đa tài khoản) ----------
+app.get('/api/gemini/accounts', wrap(async (_req, res) => res.json(await GA.list())));
+app.post('/api/gemini/active', wrap(async (req, res) => res.json(await GA.setActive(String(req.body?.id || '')))));
+app.post('/api/gemini/login/start', wrap(async (_req, res) => res.json(await GA.startLogin())));
+app.post('/api/gemini/login/code', wrap(async (req, res) => res.json(await GA.submitCode(String(req.body?.sessionId || ''), req.body?.code))));
+app.post('/api/gemini/login/cancel', wrap(async (req, res) => { await GA.cancelLogin(String(req.body?.sessionId || '')); res.json({ ok: true }); }));
+app.post('/api/gemini/apikey', wrap(async (req, res) => res.json(GA.addApiKeyAccount({ apiKey: req.body?.apiKey, label: req.body?.label }))));
+app.post('/api/gemini/logout', wrap(async (req, res) => res.json(await GA.removeAccount(String(req.body?.id || '')))));
 
 // ---------- Kho Skill AI (đồng bộ từ Claude, tải lên, Agent tự động nhận diện Skill, trích xuất dữ liệu & chạy yêu cầu AI) ----------
 app.get('/api/skills', wrap(async (_req, res) => res.json(SK.listSkills())));

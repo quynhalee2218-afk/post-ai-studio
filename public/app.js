@@ -1163,6 +1163,8 @@ $('#cl-box').addEventListener('change', async (e) => {
 });
 
 // ---------- Quản lý đa Model AI: ChatGPT & Gemini + Mặc định ----------
+let gemLogin = null; // phiên đăng nhập OAuth Google Gemini đang chờ dán mã
+
 async function loadAiAccounts() {
   let st;
   try { st = await api('/api/ai/status'); } catch (e) { return; }
@@ -1180,20 +1182,20 @@ async function loadAiAccounts() {
   if (pillGpt) {
     pillGpt.className = `pill ${gpt.ready ? 'ok' : 'bad'}`;
     pillGpt.textContent = gpt.ready
-      ? `🟢 ChatGPT: ${gpt.email ? gpt.email.split('@')[0] : (gpt.hasApiKey ? 'API Key' : 'sẵn sàng')}`
+      ? `🟢 ChatGPT: ${gpt.email || (gpt.hasApiKey ? 'API Key' : 'sẵn sàng')}`
       : '🟢 ChatGPT: chưa kết nối';
   }
   const pillGem = $('#pill-gem');
   if (pillGem) {
     pillGem.className = `pill ${gem.ready ? 'ok' : 'bad'}`;
     pillGem.textContent = gem.ready
-      ? `♊ Gemini: ${gem.hasApiKey ? 'API Key' : 'sẵn sàng'}`
+      ? `♊ Gemini: ${gem.email || (gem.hasApiKey ? 'API Key' : 'sẵn sàng')}`
       : '♊ Gemini: chưa kết nối';
   }
   const pillCl = $('#pill-cl');
   if (pillCl && cl.ready && pillCl.textContent.includes('…')) {
     pillCl.className = 'pill ok';
-    pillCl.textContent = `✦ Claude: ${cl.email ? cl.email.split('@')[0] : 'sẵn sàng'}`;
+    pillCl.textContent = `✦ Claude: ${cl.email || 'sẵn sàng'}`;
   }
 
   // Ô chọn Model AI mặc định trong tab Tài khoản
@@ -1207,11 +1209,11 @@ async function loadAiAccounts() {
   const gptBox = $('#gpt-box');
   if (gptBox) {
     const statusBadge = gpt.ready
-      ? `<b style="color:var(--ok)">✓ Đã sẵn sàng</b> · <span class="who">${esc(gpt.accountLabel || 'ChatGPT')}</span>`
+      ? `<b style="color:var(--ok)">✓ Đã sẵn sàng</b> · Đang dùng: <span class="who">${esc(gpt.email || gpt.accountLabel || 'ChatGPT')}</span>${gpt.plan ? ` <span class="badge">${esc(gpt.plan)}</span>` : ''}`
       : `<b style="color:var(--bad)">Chưa kết nối</b>`;
     gptBox.innerHTML = `
       <div>Trạng thái: ${statusBadge}</div>
-      ${gpt.cliInstalled ? `<div style="font-size:12.5px;color:var(--muted)">Đã tích hợp <b>ChatGPT CLI (Codex)</b> trên máy${gpt.email ? ` · Tài khoản: <b>${esc(gpt.email)}</b> (${esc(gpt.plan || 'plus')})` : ''}.</div>` : ''}
+      ${gpt.cliInstalled ? `<div style="font-size:12.5px;color:var(--muted)">Đã tích hợp <b>ChatGPT CLI (Codex)</b> trên máy — nếu tài khoản hiện tại hết hạn mức, bấm <b>🔑 Đổi tài khoản ChatGPT</b> để đăng nhập tài khoản khác.</div>` : ''}
       <div class="row" style="margin-top:2px">
         <button type="button" class="small primary" data-ai-act="test" data-provider="chatgpt">⚡ Kiểm tra ChatGPT</button>
         ${gpt.cliInstalled ? `<button type="button" class="small" data-ai-act="gpt-login">🔑 Đăng nhập / Đổi tài khoản ChatGPT</button>` : ''}
@@ -1227,25 +1229,52 @@ async function loadAiAccounts() {
       </div>`;
   }
 
-  // Khung Gemini (#gemini-box)
+  // Khung Gemini (#gemini-box) — Hiển thị rõ tài khoản đang kết nối + đổi / thêm tài khoản khi hết dung lượng
   const gemBox = $('#gemini-box');
   if (gemBox) {
-    const statusBadge = gem.ready
-      ? `<b style="color:var(--ok)">✓ Đã sẵn sàng</b> · <span class="who">${esc(gem.accountLabel || 'Google Gemini')}</span>`
-      : `<b style="color:var(--bad)">Chưa kết nối</b>`;
+    const gemAccs = Array.isArray(gem.accounts) ? gem.accounts : [];
+    const activeGem = gemAccs.find((a) => a.active) || gemAccs[0] || null;
+    const whoText = activeGem?.email || gem.email || (gem.hasApiKey ? `API Key (${gem.apiKeyMask})` : (gem.ready ? 'Gemini CLI' : 'chưa đăng nhập'));
+    const planText = activeGem?.plan || gem.plan || (gem.hasApiKey ? 'API Key' : '');
+    const gemAccLabel = (a) => `${a.email || '(chưa đặt tên)'}${a.plan ? ` · ${a.plan}` : ''}${a.active ? ' (đang dùng)' : ''}`;
+
     gemBox.innerHTML = `
-      <div>Trạng thái: ${statusBadge}</div>
-      ${gem.cliInstalled ? `<div style="font-size:12.5px;color:var(--muted)">Đã tích hợp <b>Google Gemini CLI</b> có sẵn trên máy — chạy trực tiếp Gemini 2.5 Pro & Flash không tốn phí API.</div>` : ''}
-      <div class="row" style="margin-top:2px">
-        <button type="button" class="small primary" data-ai-act="test" data-provider="gemini">⚡ Kiểm tra Gemini</button>
-        <button type="button" class="small" data-ai-act="toggle-key" data-target="gem-key-form">${gem.hasApiKey ? `🔐 Đổi Gemini API Key (${esc(gem.apiKeyMask)})` : '＋ Nhập Gemini API Key (tuỳ chọn)'}</button>
+      <div>
+        <span>Đang dùng: <span class="who">${esc(whoText)}</span>${planText ? ` <span class="badge">${esc(planText)}</span>` : ''}</span>
+        ${gem.ready ? ` · <b style="color:var(--ok);font-size:12.5px">✓ Đã sẵn sàng</b>` : ` · <b style="color:var(--bad);font-size:12.5px">Chưa kết nối</b>`}
       </div>
-      <div id="gem-key-form" class="manual" style="margin-top:4px" ${gem.ready ? 'hidden' : ''}>
-        <div style="font-size:12.5px;margin-bottom:4px"><b>Google AI Studio API Key</b> (tuỳ chọn — lấy miễn phí tại <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>):</div>
+      ${gemAccs.length > 0 ? `
+        <div class="field" style="margin-top:2px">
+          <span class="field-label" style="font-size:12px;color:var(--ink-2)">Chuyển đổi tài khoản Gemini (${gemAccs.length} tài khoản đã lưu — tự động đổi sang tài khoản tiếp theo nếu hết dung lượng):</span>
+          <select id="gem-active" style="margin-top:3px">
+            ${gemAccs.map((a) => `<option value="${esc(a.id)}" ${a.active ? 'selected' : ''}>${esc(gemAccLabel(a))}</option>`).join('')}
+          </select>
+        </div>` : ''}
+      ${gemLogin ? `
+        <div class="manual" style="margin-top:4px">
+          <b>Thêm / Đổi tài khoản Google cho Gemini</b>
+          <ol class="howto" style="font-size:13px">
+            <li><a href="${esc(gemLogin.url)}" target="_blank" rel="noopener">Mở trang đăng nhập Google Gemini</a> — chọn tài khoản Google bạn muốn thêm hoặc đổi sang.</li>
+            <li>Sau khi đồng ý cấp quyền, chép mã xác thực hiện ra trên màn hình và dán vào đây:</li>
+          </ol>
+          <input id="gem-code" placeholder="Dán mã xác thực từ Google vào đây" autocomplete="off">
+          <div class="row" style="margin-top:6px">
+            <button type="button" class="small primary" data-ai-act="gem-submit">Xác nhận & Chuyển tài khoản</button>
+            <button type="button" class="small" data-ai-act="gem-cancel">Huỷ</button>
+          </div>
+        </div>` : `
+        <div class="row" style="margin-top:2px">
+          <button type="button" class="small primary" data-ai-act="gem-add">＋ Thêm / Đổi tài khoản Google</button>
+          <button type="button" class="small" data-ai-act="test" data-provider="gemini">⚡ Kiểm tra Gemini</button>
+          <button type="button" class="small" data-ai-act="toggle-key" data-target="gem-key-form">＋ Thêm API Key dự phòng</button>
+          ${activeGem && gemAccs.length > 1 ? `<button type="button" class="small danger" data-ai-act="gem-logout" data-id="${esc(activeGem.id)}">Xoá tài khoản này</button>` : ''}
+        </div>`}
+      <div id="gem-key-form" class="manual" style="margin-top:4px" hidden>
+        <div style="font-size:12.5px;margin-bottom:4px"><b>Thêm tài khoản Gemini bằng API Key</b> (dự phòng khi tài khoản Google CLI hết dung lượng — lấy tại <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>):</div>
         <div class="row" style="margin-top:0">
-          <input type="password" id="gem-api-key-inp" placeholder="AIzaSy..." autocomplete="new-password" style="flex:1">
-          <button type="button" class="small primary" data-ai-act="save-gem-key">Lưu Key</button>
-          ${gem.hasApiKey ? `<button type="button" class="small danger" data-ai-act="clear-gem-key">Xoá Key</button>` : ''}
+          <input type="text" id="gem-api-label-inp" placeholder="Tên gợi nhớ (VD: Key Gmail phụ 1)" style="flex:1;min-width:150px">
+          <input type="password" id="gem-api-key-inp" placeholder="AIzaSy..." autocomplete="new-password" style="flex:1.4;min-width:180px">
+          <button type="button" class="small primary" data-ai-act="save-gem-key">＋ Lưu vào danh sách</button>
         </div>
       </div>`;
   }
@@ -1261,6 +1290,20 @@ $('#default-ai-select')?.addEventListener('change', async (e) => {
     toast(`Đã đặt Model AI mặc định: ${e.target.options[e.target.selectedIndex]?.text || aiModel}`);
   } catch (err) {
     toast(err.message);
+  }
+});
+
+$('#gemini-box')?.addEventListener('change', async (e) => {
+  if (e.target.id !== 'gem-active') return;
+  const sel = e.target;
+  sel.disabled = true;
+  try {
+    const r = await api('/api/gemini/active', { method: 'POST', body: { id: sel.value } });
+    toast(`✓ Đã chuyển Gemini sang tài khoản: ${r.email || r.id}`, 4500);
+    await loadAiAccounts();
+  } catch (err) {
+    toast(err.message, 6000);
+    await loadAiAccounts();
   }
 });
 
@@ -1288,6 +1331,37 @@ async function handleAiBoxClick(e) {
       }
       return;
     }
+    if (act === 'gem-add') {
+      b.disabled = true;
+      b.textContent = 'Đang lấy link đăng nhập…';
+      gemLogin = await api('/api/gemini/login/start', { method: 'POST' });
+      await loadAiAccounts();
+      window.open(gemLogin.url, '_blank', 'noopener');
+      return;
+    }
+    if (act === 'gem-submit') {
+      b.disabled = true;
+      b.textContent = 'Đang xác nhận…';
+      const code = ($('#gem-code')?.value || '').trim();
+      const r = await api('/api/gemini/login/code', { method: 'POST', body: { sessionId: gemLogin?.sessionId, code } });
+      gemLogin = null;
+      toast(`✓ Đã kết nối và chuyển Gemini sang tài khoản ${r.email}!`, 6000);
+      await loadAiAccounts();
+      return;
+    }
+    if (act === 'gem-cancel') {
+      await api('/api/gemini/login/cancel', { method: 'POST', body: { sessionId: gemLogin?.sessionId } });
+      gemLogin = null;
+      await loadAiAccounts();
+      return;
+    }
+    if (act === 'gem-logout') {
+      if (!confirm('Xoá tài khoản Gemini này khỏi danh sách chuyển đổi?')) return;
+      await api('/api/gemini/logout', { method: 'POST', body: { id: b.dataset.id } });
+      toast('Đã xoá tài khoản Gemini và chuyển sang tài khoản kế tiếp');
+      await loadAiAccounts();
+      return;
+    }
     if (act === 'gpt-login') {
       b.disabled = true;
       b.textContent = 'Đang mở trình duyệt…';
@@ -1312,9 +1386,11 @@ async function handleAiBoxClick(e) {
     }
     if (act === 'save-gem-key') {
       const key = ($('#gem-api-key-inp')?.value || '').trim();
+      const label = ($('#gem-api-label-inp')?.value || '').trim();
       if (!key) return toast('Hãy dán Gemini API Key (AIza...)');
+      const r = await api('/api/gemini/apikey', { method: 'POST', body: { apiKey: key, label } });
       await api('/api/ai/settings', { method: 'POST', body: { geminiApiKey: key } });
-      toast('✓ Đã lưu Gemini API Key');
+      toast(`✓ Đã thêm & kích hoạt "${r.email || r.label}" trong danh sách tài khoản Gemini!`);
       await loadAiAccounts();
       return;
     }
@@ -1326,6 +1402,7 @@ async function handleAiBoxClick(e) {
     }
   } catch (err) {
     toast(err.message, 7000);
+    if (act === 'gem-add') gemLogin = null;
     await loadAiAccounts();
   }
 }
