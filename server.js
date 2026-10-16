@@ -16,7 +16,8 @@ import * as FBB from './lib/fb-browser.js';
 import { FLOW_MODELS } from './lib/flow-auto.js';
 import * as J from './lib/jobs.js';
 import * as SK from './lib/skills.js';
-import { extractBriefFromSkills, askWithSkills, resolveAgentSkills, generateViralTopics, VIRAL_FORMATS, TRAFFIC_GOALS } from './lib/llm.js';
+import { extractBriefFromSkills, askWithSkills, resolveAgentSkills, generateViralTopics, testAiModel, VIRAL_FORMATS, TRAFFIC_GOALS } from './lib/llm.js';
+import { AI_PROVIDERS, AI_MODELS, getDefaultAiSelection, saveAiSettings, getAllAiStatus, startChatGptBrowserLogin } from './lib/ai-providers.js';
 
 fs.mkdirSync(path.join(config.dataDir, 'uploads'), { recursive: true });
 SK.initSkills();
@@ -67,6 +68,9 @@ app.get('/api/config', (_req, res) => {
     flowModels: FLOW_MODELS,
     viralFormats: VIRAL_FORMATS,
     trafficGoals: TRAFFIC_GOALS,
+    aiProviders: AI_PROVIDERS,
+    aiModels: AI_MODELS,
+    defaultAi: getDefaultAiSelection(),
   });
 });
 
@@ -139,6 +143,7 @@ app.post('/api/jobs', upload.single('refImage'), wrap(async (req, res) => {
   const input = {
     topic: b.topic.trim(),
     sceneCount,
+    aiModel: b.aiModel?.trim() || '',
     videoType: b.videoType === 'viral' ? 'viral' : 'ads',
     viralFormat: b.viralFormat?.trim() || 'storytelling',
     trafficGoal: b.trafficGoal?.trim() || 'engage_comment',
@@ -239,6 +244,15 @@ app.post('/api/jobs/:id/cancel', action((job) => J.cancelGenerate(job)));
 app.post('/api/jobs/:id/stitch', action((job, b) => J.startStitch(job, { removeWatermark: b.removeWatermark !== false })));
 app.post('/api/jobs/:id/facebook', action((job, b) => J.startFacebook(job, { mode: b.mode, scheduledAt: b.scheduledAt })));
 
+// ---------- Quản lý đa Model AI (Claude · ChatGPT · Gemini) ----------
+app.get('/api/ai/status', wrap(async (_req, res) => res.json(await getAllAiStatus())));
+app.post('/api/ai/settings', wrap(async (req, res) => {
+  saveAiSettings(req.body || {});
+  res.json(await getAllAiStatus());
+}));
+app.post('/api/ai/test', wrap(async (req, res) => res.json(await testAiModel(req.body?.aiModel || req.body?.provider || ''))));
+app.post('/api/ai/chatgpt/login', wrap(async (_req, res) => res.json(await startChatGptBrowserLogin())));
+
 // ---------- Tài khoản Claude ----------
 app.get('/api/claude/accounts', wrap(async (_req, res) => res.json(await CA.list())));
 app.post('/api/claude/active', wrap(async (req, res) => { CA.setActive(String(req.body?.id || '')); res.json({ ok: true }); }));
@@ -251,9 +265,9 @@ app.post('/api/claude/logout', wrap(async (req, res) => { await CA.logout(String
 app.get('/api/skills', wrap(async (_req, res) => res.json(SK.listSkills())));
 app.post('/api/skills/sync', wrap(async (_req, res) => res.json(SK.syncFromClaude())));
 app.post('/api/skills/detect', wrap(async (req, res) => {
-  const { userInput = {}, mode = 'fast', taskType = 'any', excludeIds = [] } = req.body || {};
+  const { userInput = {}, mode = 'fast', taskType = 'any', excludeIds = [], aiModel = '' } = req.body || {};
   if (mode === 'ai') {
-    const r = await resolveAgentSkills({ skillIds: excludeIds, userInput, autoDetect: true, taskType, maxAuto: 3 });
+    const r = await resolveAgentSkills({ skillIds: excludeIds, userInput, autoDetect: true, taskType, maxAuto: 3, aiModel });
     return res.json({ matchedSkills: r.autoDetected, candidates: r.candidates, costUsd: r.costUsd });
   }
   const matchedSkills = SK.detectSkillsForInput(userInput, { limit: 4, taskType, excludeIds });

@@ -91,6 +91,25 @@
           </div>
         </div>
 
+        <!-- Bộ chọn Model AI viết kịch bản: Claude vs ChatGPT vs Gemini -->
+        <div class="full ai-model-box">
+          <div class="ai-model-head">
+            <div>
+              <span class="field-label">🧠 Chọn Model AI viết kịch bản & phân tích Skill</span>
+              <small class="muted">Hỗ trợ đầy đủ cả 3 nền tảng AI hàng đầu: <b>Claude (Anthropic)</b>, <b>ChatGPT (OpenAI)</b> và <b>Gemini (Google)</b>.</small>
+            </div>
+            <div class="chips" id="new-ai-provider-chips">
+              <button type="button" data-ai-prov="claude" class="on">✦ Claude</button>
+              <button type="button" data-ai-prov="chatgpt">🟢 ChatGPT</button>
+              <button type="button" data-ai-prov="gemini">♊ Gemini</button>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px;align-items:center">
+            <select name="aiModel" id="new-ai-model-select" style="flex:1;min-width:260px"></select>
+            <small id="new-ai-model-hint" class="muted" style="margin:0"></small>
+          </div>
+        </div>
+
         <div class="full skill-pick-box">
           <div class="skill-pick-head">
             <div>
@@ -149,7 +168,7 @@
         </label>
         <label>Ảnh tham chiếu nhân vật
           <input type="file" name="refImage" accept="image/*">
-          <small class="muted">Để trống ô mô tả nhân vật thì Claude tự đọc ảnh để mô tả</small>
+          <small class="muted">Để trống ô mô tả nhân vật thì Model AI tự đọc ảnh để mô tả</small>
         </label>
         <label>Ưu tiên khi có ảnh nhân vật
           <select name="consistency">
@@ -189,7 +208,7 @@
           <div class="grow">
             <span class="eyebrow">✦ Kho tri thức & Kỹ năng AI</span>
             <h1>Skill AI & Đồng bộ từ Claude</h1>
-            <div class="muted">Đẩy các Skill của bạn lên (file <code>.zip</code>, <code>SKILL.md</code>, tài liệu <code>references/</code>) hoặc đồng bộ trực tiếp toàn bộ Skill từ tài khoản Claude trên máy. Model AI sẽ đọc hiểu kiến thức và trích dữ liệu từ Skill để viết kịch bản video cũng như xử lý các yêu cầu khác.</div>
+            <div class="muted">Đẩy các Skill của bạn lên (file <code>.zip</code>, <code>SKILL.md</code>, tài liệu <code>references/</code>) hoặc đồng bộ trực tiếp toàn bộ Skill từ tài khoản Claude trên máy. Các Model AI (<b>Claude, ChatGPT, Gemini</b>) sẽ đọc hiểu kiến thức và trích dữ liệu từ Skill để viết kịch bản video cũng như xử lý các yêu cầu khác.</div>
           </div>
           <div class="row" style="margin:0">
             <button id="btn-skill-sync" class="primary">↻ Đồng bộ từ Claude</button>
@@ -219,8 +238,17 @@
 
       <!-- Khung chạy AI với Skill (làm kịch bản & các yêu cầu khác) -->
       <div class="card skill-runner-card">
-        <h2>✦ Chạy Model AI với Skill (Làm kịch bản, trích dữ liệu & yêu cầu khác)</h2>
-        <p class="muted" style="margin:-6px 0 10px;font-size:13.5px">Bạn có thể nhập thẳng yêu cầu bên dưới — <b>Agent sẽ tự động nhận biết và nạp Skill tác vụ phù hợp</b> từ kho Skill — hoặc tự chọn Skill thủ công.</p>
+        <div class="job-head" style="margin-bottom:8px">
+          <div class="grow">
+            <h2 style="margin-bottom:4px">✦ Chạy Model AI với Skill (Claude · ChatGPT · Gemini)</h2>
+            <p class="muted" style="margin:0;font-size:13.5px">Chọn Model AI bạn muốn dùng, nhập thẳng yêu cầu bên dưới — <b>Agent sẽ tự động nhận biết và nạp Skill tác vụ phù hợp</b> từ kho Skill — hoặc tự chọn Skill thủ công.</p>
+          </div>
+          <div style="min-width:260px">
+            <label style="font-size:12px">Model AI xử lý yêu cầu:
+              <select id="ask-ai-model-select" style="margin-top:4px;font-size:13px;padding:6px 10px"></select>
+            </label>
+          </div>
+        </div>
         <label class="agent-auto-toggle" style="margin-bottom:8px">
           <input type="checkbox" id="ask-auto-skill" checked style="width:auto">
           <span>🤖 <b>Agent tự động nhận biết & sử dụng Skill tác vụ theo dữ liệu yêu cầu</b></span>
@@ -268,14 +296,31 @@
 
     <section id="view-accounts" hidden>
       <div class="card hero-card">
-        <span class="eyebrow">✦ Kết nối</span>
-        <h1>Tài khoản</h1>
-        <p class="muted" style="margin:0">Tài khoản Claude để viết kịch bản, Chrome Facebook để đăng bài, Chrome Flow để tạo video.</p>
+        <div class="job-head" style="align-items:center">
+          <div class="grow">
+            <span class="eyebrow">✦ Kết nối đa nền tảng</span>
+            <h1>Tài khoản & Model AI</h1>
+            <p class="muted" style="margin:0">Quản lý 3 Model AI viết kịch bản (<b>Claude · ChatGPT · Gemini</b>), Chrome Flow để render video Veo 3 và Chrome Facebook để đăng Reel.</p>
+          </div>
+          <div style="min-width:280px">
+            <label style="font-size:12.5px">🌟 Model AI mặc định toàn hệ thống:
+              <select id="default-ai-select" style="margin-top:4px;font-weight:700"></select>
+            </label>
+          </div>
+        </div>
       </div>
       <div class="acc-grid">
         <div class="card acc-card">
-          <div class="acc-head"><span class="acc-icon cl">✦</span><div><h2 style="margin:0">Claude</h2><div class="muted" style="font-size:13px">Viết kịch bản, rút gọn prompt, đọc ảnh nhân vật</div></div></div>
+          <div class="acc-head"><span class="acc-icon cl">✦</span><div><h2 style="margin:0">Claude (Anthropic)</h2><div class="muted" style="font-size:13px">Claude Sonnet 4.5 / Opus 4.5 · Viết kịch bản & đọc Skill</div></div></div>
           <div id="cl-box" class="acc-body muted">Đang kiểm tra…</div>
+        </div>
+        <div class="card acc-card">
+          <div class="acc-head"><span class="acc-icon gpt">🟢</span><div><h2 style="margin:0">ChatGPT (OpenAI)</h2><div class="muted" style="font-size:13px">GPT-5.6 / GPT-6 Astra / GPT-4o · Kịch bản & Hook Viral</div></div></div>
+          <div id="gpt-box" class="acc-body muted">Đang kiểm tra…</div>
+        </div>
+        <div class="card acc-card">
+          <div class="acc-head"><span class="acc-icon gem">♊</span><div><h2 style="margin:0">Gemini (Google)</h2><div class="muted" style="font-size:13px">Gemini 3.8 Flash / Gemini 4 Argon / 2.5 Pro · Tốc độ cao</div></div></div>
+          <div id="gemini-box" class="acc-body muted">Đang kiểm tra…</div>
         </div>
         <div class="card acc-card">
           <div class="acc-head"><span class="acc-icon flow">▶</span><div><h2 style="margin:0">Google Flow</h2><div class="muted" style="font-size:13px">Chrome Flow tự tạo video từng cảnh</div></div></div>

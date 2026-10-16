@@ -48,6 +48,51 @@ const STAGE = {
   generating: 'Đang tạo cảnh', clips_ready: 'Đủ cảnh — chờ ghép', stitched: 'Đã ghép', posted_draft: 'Đã gửi nháp FB', posted: 'Đã đăng FB', scheduled: 'Đã hẹn giờ FB',
 };
 
+function aiShortBadge(aiModelStr) {
+  const raw = String(aiModelStr || cfg.defaultAi?.combined || 'claude');
+  const prov = raw.split(':')[0] || 'claude';
+  if (prov === 'chatgpt') return '<span class="badge gpt-pill" style="font-size:10px;padding:1px 6px;margin-right:4px;vertical-align:middle">🟢 ChatGPT</span>';
+  if (prov === 'gemini') return '<span class="badge gem-pill" style="font-size:10px;padding:1px 6px;margin-right:4px;vertical-align:middle">♊ Gemini</span>';
+  return '<span class="badge cl-pill" style="font-size:10px;padding:1px 6px;margin-right:4px;vertical-align:middle">✦ Claude</span>';
+}
+
+function aiModelOpts(selectedVal = '') {
+  const sel = selectedVal || cfg.defaultAi?.combined || 'claude:claude-sonnet-4-5';
+  return (cfg.aiProviders || []).map((p) => `
+    <optgroup label="${esc(`${p.icon} ${p.name}`)}">
+      ${(p.models || []).map((m) => {
+        const val = `${p.id}:${m.id}`;
+        return `<option value="${esc(val)}" ${val === sel || m.id === sel ? 'selected' : ''}>${esc(p.icon)} ${esc(m.name)}</option>`;
+      }).join('')}
+    </optgroup>`).join('');
+}
+
+function updateNewAiModelUI() {
+  const selEl = $('#new-ai-model-select');
+  if (!selEl) return;
+  const val = selEl.value || cfg.defaultAi?.combined || 'claude:claude-sonnet-4-5';
+  const provId = val.split(':')[0] || 'claude';
+  for (const btn of document.querySelectorAll('#new-ai-provider-chips button[data-ai-prov]')) {
+    btn.classList.toggle('on', btn.dataset.aiProv === provId);
+  }
+  const provObj = (cfg.aiProviders || []).find((p) => p.id === provId);
+  if ($('#new-ai-model-hint') && provObj) {
+    $('#new-ai-model-hint').textContent = provObj.desc || '';
+  }
+}
+
+function populateAiModelSelects(keepCurrent = false) {
+  const defVal = cfg.defaultAi?.combined || 'claude:claude-sonnet-4-5';
+  for (const selId of ['#new-ai-model-select', '#ask-ai-model-select', '#default-ai-select']) {
+    const el = $(selId);
+    if (!el) continue;
+    const targetVal = (keepCurrent && el.value) ? el.value : defVal;
+    el.innerHTML = aiModelOpts(targetVal);
+    el.value = targetVal;
+  }
+  updateNewAiModelUI();
+}
+
 // ---------- danh sách ----------
 async function loadList() {
   const jobs = await api('/api/jobs');
@@ -56,7 +101,7 @@ async function loadList() {
     const typeBadge = `<span class="badge ${isViral ? 'viral-pill' : 'ads-pill'}" style="font-size:10px;padding:1px 6px;margin-right:4px;vertical-align:middle">${isViral ? '🔥 Viral' : '🛍️ Ads'}</span>`;
     return `
     <li data-id="${j.id}" class="${j.id === currentId ? 'active' : ''} ${j.busy ? 'st-busy' : ({ posted: 'st-done', posted_draft: 'st-done', scheduled: 'st-scheduled', stitched: 'st-done' }[j.stage] || '')}">
-      ${typeBadge}${esc(j.topic.slice(0, 56))}
+      ${typeBadge}${aiShortBadge(j.aiModel)}${esc(j.topic.slice(0, 52))}
       <div class="meta">${j.sceneCount} cảnh · ${esc(STAGE[j.stage] || j.stage)}${j.busy ? ' · ⏳' : ''}</div>
     </li>`;
   }).join('') || '<li class="muted">Chưa có video nào</li>';
@@ -114,7 +159,7 @@ function setNewVideoMode(mode) {
   if ($('#new-desc')) {
     $('#new-desc').innerHTML = isViral
       ? 'Xây dựng kịch bản & video Reels đăng bài hàng ngày theo công thức <b>Kể chuyện đời thường / Bóc sự thật / Bí kíp / Đạo lý</b> giúp giữ chân người lạ xem hết 100%, kích thích Bình luận & Chia sẻ để kéo khách hàng tiềm năng về Fanpage tự nhiên.'
-      : 'Claude đọc hiểu kiến thức từ kho Skill AI bạn chọn (kèm chuẩn kỹ thuật Video AI) để trích xuất USP sản phẩm, đánh trúng nỗi đau khách hàng và viết kịch bản chuyển đổi.';
+      : 'Model AI (<b>Claude, ChatGPT, hoặc Gemini</b>) đọc hiểu kiến thức từ kho Skill AI bạn chọn để trích xuất USP sản phẩm, đánh trúng nỗi đau khách hàng và viết kịch bản chuyển đổi.';
   }
   if ($('#lbl-topic')) {
     $('#lbl-topic').textContent = isViral
@@ -193,6 +238,21 @@ $('#video-type-cards')?.addEventListener('click', (e) => {
   setNewVideoMode(card.dataset.vtype);
 });
 
+$('#new-ai-provider-chips')?.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-ai-prov]');
+  if (!b) return;
+  const provId = b.dataset.aiProv;
+  const provObj = (cfg.aiProviders || []).find((p) => p.id === provId);
+  if (!provObj) return;
+  const defModel = provObj.models.find((m) => m.default) || provObj.models[0];
+  const selEl = $('#new-ai-model-select');
+  if (selEl && defModel) {
+    selEl.value = `${provId}:${defModel.id}`;
+    updateNewAiModelUI();
+  }
+});
+$('#new-ai-model-select')?.addEventListener('change', updateNewAiModelUI);
+
 $('#viral-format-select')?.addEventListener('change', () => {
   updateViralSelectHints();
   if (typeof scheduleDetectNewSkills === 'function') scheduleDetectNewSkills();
@@ -207,6 +267,7 @@ $('#btn-viral-suggest')?.addEventListener('click', async (e) => {
   const character = ($('#form-new [name=character]')?.value || '').trim();
   const viralFormat = $('#viral-format-select')?.value || 'storytelling';
   const trafficGoal = $('#traffic-goal-select')?.value || 'engage_comment';
+  const aiModel = $('#new-ai-model-select')?.value || '';
   const pinnedIds = skillsList.filter((s) => s.pinned && !s.builtin).map((s) => s.id);
   const skillIds = [...new Set([...newSelectedSkills, ...pinnedIds])];
   const autoDetect = $('#new-auto-skill')?.checked !== false;
@@ -217,12 +278,12 @@ $('#btn-viral-suggest')?.addEventListener('click', async (e) => {
   const box = $('#viral-topics-result');
   if (box) {
     box.hidden = false;
-    box.innerHTML = `<div class="card muted" style="grid-column:1/-1;margin:0;text-align:center;padding:18px"><span class="busy"><span class="spin"></span>AI đang phân tích ngách Fanpage, tệp khách hàng & kho Skill để tạo 8 ý tưởng Video Viral kéo Traffic hôm nay (khoảng 15–30s)…</span></div>`;
+    box.innerHTML = `<div class="card muted" style="grid-column:1/-1;margin:0;text-align:center;padding:18px"><span class="busy"><span class="spin"></span>Model AI đang phân tích ngách Fanpage, tệp khách hàng & kho Skill để tạo 8 ý tưởng Video Viral kéo Traffic hôm nay (khoảng 15–30s)…</span></div>`;
   }
   try {
     const r = await api('/api/viral/topics', {
       method: 'POST',
-      body: { niche, audience, character, viralFormat, trafficGoal, skillIds, autoDetect },
+      body: { niche, audience, character, viralFormat, trafficGoal, skillIds, autoDetect, aiModel },
     });
     lastViralTopics = r.topics || [];
     if (Array.isArray(r.selectedIds) && r.selectedIds.length) {
@@ -331,9 +392,14 @@ $('#form-new').addEventListener('submit', async (e) => {
   if (btn) btn.disabled = true;
   try {
     syncNewSkillsInput();
+    const keepAiModel = $('#new-ai-model-select')?.value || cfg.defaultAi?.combined || '';
     const { id } = await api('/api/jobs', { method: 'POST', body: new FormData(e.target) });
     const keepMode = currentVideoType;
     e.target.reset();
+    if ($('#new-ai-model-select') && keepAiModel) {
+      $('#new-ai-model-select').value = keepAiModel;
+      updateNewAiModelUI();
+    }
     newSelectedSkills = [];
     syncNewSkillsInput();
     $('#new-skill-topics').hidden = true;
@@ -409,12 +475,16 @@ function renderJob(job) {
   const isViral = job.input?.videoType === 'viral';
   const vFmt = (cfg.viralFormats || []).find((f) => f.id === job.input?.viralFormat) || (cfg.viralFormats || [])[0];
   const tGoal = (cfg.trafficGoals || []).find((g) => g.id === job.input?.trafficGoal) || (cfg.trafficGoals || [])[0];
+  const curJobAi = job.input?.aiModel || job.aiSelection?.combined || cfg.defaultAi?.combined || 'claude:claude-sonnet-4-5';
 
   const modeBarHtml = `
     <div class="row" style="margin:8px 0 0;gap:8px;align-items:center;flex-wrap:wrap">
       <span class="badge ${isViral ? 'viral-pill' : 'ads-pill'}" style="font-size:12px;padding:4px 10px">
         ${isViral ? '🔥 Video Viral Kéo Traffic Fanpage' : '🛍️ Video Quảng Cáo Sản Phẩm'}
       </span>
+      <select id="job-ai-model" style="width:auto;max-width:310px;font-size:12.5px;padding:4px 8px;font-weight:600" ${busy ? 'disabled' : ''} title="Chọn Model AI (Claude / ChatGPT / Gemini) rồi bấm Viết lại kịch bản">
+        ${aiModelOpts(curJobAi)}
+      </select>
       <select id="job-videotype" style="width:auto;font-size:12.5px;padding:4px 8px" ${busy ? 'disabled' : ''} title="Đổi loại video rồi bấm Viết lại kịch bản">
         <option value="ads" ${!isViral ? 'selected' : ''}>Chế độ: 🛍️ Quảng cáo sản phẩm</option>
         <option value="viral" ${isViral ? 'selected' : ''}>Chế độ: 🔥 Viral kéo Traffic hàng ngày</option>
@@ -827,6 +897,7 @@ function openAccounts() {
   loadList();
   show('accounts');
   loadClaude();
+  loadAiAccounts();
   loadFb();
   loadChromeFlow();
   loadChromeBox('fb');
@@ -1001,19 +1072,26 @@ $('#posts-list').addEventListener('click', async (e) => {
   }
 });
 
-// ---------- Tài khoản Claude ----------
+// ---------- Tài khoản Claude / ChatGPT / Gemini ----------
 let clLogin = null; // phiên đăng nhập đang chờ dán mã
+let aiStatusCache = null;
 
 async function loadClaude() {
   const box = $('#cl-box');
+  if (!box) return;
   let accs;
   try { accs = await api('/api/claude/accounts'); } catch (e) { box.textContent = e.message; return; }
   const act = accs.find((a) => a.active) || accs[0];
+  const clInfo = aiStatusCache?.providers?.claude;
+  const ready = Boolean(act?.loggedIn || clInfo?.hasApiKey);
   const pill = $('#pill-cl');
-  if (pill) { pill.className = `pill ${act?.loggedIn ? 'ok' : 'bad'}`; pill.textContent = `Claude: ${act?.email || 'chưa đăng nhập'}`; }
+  if (pill) {
+    pill.className = `pill ${ready ? 'ok' : 'bad'}`;
+    pill.textContent = ready ? `✦ Claude: ${act?.email || (clInfo?.hasApiKey ? 'API Key' : 'sẵn sàng')}` : '✦ Claude: chưa đăng nhập';
+  }
   const label = (a) => `${a.email || '(chưa đăng nhập)'}${a.plan ? ` · ${a.plan}` : ''}${a.builtin ? ' · mặc định' : ''}`;
   box.innerHTML = `
-    <span>Đang dùng: <span class="who">${esc(act?.email || 'chưa đăng nhập')}</span>${act?.plan ? ` <span class="badge">${esc(act.plan)}</span>` : ''}</span>
+    <span>Đang dùng: <span class="who">${esc(act?.email || (clInfo?.hasApiKey ? `API Key (${clInfo.apiKeyMask})` : 'chưa đăng nhập'))}</span>${act?.plan ? ` <span class="badge">${esc(act.plan)}</span>` : ''}</span>
     ${accs.length > 1 ? `<select id="cl-active">${accs.map((a) => `<option value="${esc(a.id)}" ${a.active ? 'selected' : ''} ${a.loggedIn ? '' : 'disabled'}>${esc(label(a))}</option>`).join('')}</select>` : ''}
     ${clLogin ? `
       <div class="manual" style="margin-top:0">
@@ -1027,6 +1105,7 @@ async function loadClaude() {
       </div>` : `
       <div class="row" style="margin-top:0">
         <button class="small" id="cl-add">＋ Thêm tài khoản</button>
+        <button class="small" id="cl-test">⚡ Kiểm tra Claude</button>
         ${act && !act.builtin ? `<button class="small danger" id="cl-logout" data-id="${esc(act.id)}">Đăng xuất</button>` : ''}
       </div>`}`;
 }
@@ -1040,6 +1119,17 @@ $('#cl-box').addEventListener('click', async (e) => {
       clLogin = await api('/api/claude/login/start', { method: 'POST' });
       await loadClaude();
       window.open(clLogin.url, '_blank', 'noopener');
+    } else if (id === 'cl-test') {
+      const orig = e.target.textContent;
+      e.target.disabled = true;
+      e.target.textContent = '⏳ Đang kiểm tra…';
+      try {
+        const r = await api('/api/ai/test', { method: 'POST', body: { aiModel: 'claude-sonnet-4-6' } });
+        toast(`✓ Claude phản hồi tốt (${(r.elapsedMs / 1000).toFixed(1)}s): "${r.reply}"`, 5000);
+      } finally {
+        e.target.disabled = false;
+        if (document.body.contains(e.target)) e.target.textContent = orig;
+      }
     } else if (id === 'cl-submit') {
       e.target.disabled = true;
       e.target.textContent = 'Đang xác nhận…';
@@ -1071,6 +1161,176 @@ $('#cl-box').addEventListener('change', async (e) => {
     await loadClaude();
   } catch (err) { toast(err.message); }
 });
+
+// ---------- Quản lý đa Model AI: ChatGPT & Gemini + Mặc định ----------
+async function loadAiAccounts() {
+  let st;
+  try { st = await api('/api/ai/status'); } catch (e) { return; }
+  aiStatusCache = st;
+  if (st.defaultAi) {
+    cfg.defaultAi = st.defaultAi;
+  }
+
+  // Cập nhật các pill trên thanh header
+  const gpt = st.providers?.chatgpt || {};
+  const gem = st.providers?.gemini || {};
+  const cl = st.providers?.claude || {};
+
+  const pillGpt = $('#pill-gpt');
+  if (pillGpt) {
+    pillGpt.className = `pill ${gpt.ready ? 'ok' : 'bad'}`;
+    pillGpt.textContent = gpt.ready
+      ? `🟢 ChatGPT: ${gpt.email ? gpt.email.split('@')[0] : (gpt.hasApiKey ? 'API Key' : 'sẵn sàng')}`
+      : '🟢 ChatGPT: chưa kết nối';
+  }
+  const pillGem = $('#pill-gem');
+  if (pillGem) {
+    pillGem.className = `pill ${gem.ready ? 'ok' : 'bad'}`;
+    pillGem.textContent = gem.ready
+      ? `♊ Gemini: ${gem.hasApiKey ? 'API Key' : 'sẵn sàng'}`
+      : '♊ Gemini: chưa kết nối';
+  }
+  const pillCl = $('#pill-cl');
+  if (pillCl && cl.ready && pillCl.textContent.includes('…')) {
+    pillCl.className = 'pill ok';
+    pillCl.textContent = `✦ Claude: ${cl.email ? cl.email.split('@')[0] : 'sẵn sàng'}`;
+  }
+
+  // Ô chọn Model AI mặc định trong tab Tài khoản
+  const defSel = $('#default-ai-select');
+  if (defSel) {
+    const curDef = st.defaultAi?.model || st.defaultAi?.provider || 'claude';
+    defSel.innerHTML = aiModelOpts(curDef);
+  }
+
+  // Khung ChatGPT (#gpt-box)
+  const gptBox = $('#gpt-box');
+  if (gptBox) {
+    const statusBadge = gpt.ready
+      ? `<b style="color:var(--ok)">✓ Đã sẵn sàng</b> · <span class="who">${esc(gpt.accountLabel || 'ChatGPT')}</span>`
+      : `<b style="color:var(--bad)">Chưa kết nối</b>`;
+    gptBox.innerHTML = `
+      <div>Trạng thái: ${statusBadge}</div>
+      ${gpt.cliInstalled ? `<div style="font-size:12.5px;color:var(--muted)">Đã tích hợp <b>ChatGPT CLI (Codex)</b> trên máy${gpt.email ? ` · Tài khoản: <b>${esc(gpt.email)}</b> (${esc(gpt.plan || 'plus')})` : ''}.</div>` : ''}
+      <div class="row" style="margin-top:2px">
+        <button type="button" class="small primary" data-ai-act="test" data-provider="chatgpt">⚡ Kiểm tra ChatGPT</button>
+        ${gpt.cliInstalled ? `<button type="button" class="small" data-ai-act="gpt-login">🔑 Đăng nhập / Đổi tài khoản ChatGPT</button>` : ''}
+        <button type="button" class="small" data-ai-act="toggle-key" data-target="gpt-key-form">${gpt.hasApiKey ? `🔐 Đổi OpenAI API Key (${esc(gpt.apiKeyMask)})` : '＋ Nhập OpenAI API Key (tuỳ chọn)'}</button>
+      </div>
+      <div id="gpt-key-form" class="manual" style="margin-top:4px" ${gpt.ready ? 'hidden' : ''}>
+        <div style="font-size:12.5px;margin-bottom:4px"><b>OpenAI API Key</b> (tuỳ chọn — nếu đã đăng nhập ChatGPT CLI ở trên thì không bắt buộc):</div>
+        <div class="row" style="margin-top:0">
+          <input type="password" id="gpt-api-key-inp" placeholder="sk-proj-..." autocomplete="new-password" style="flex:1">
+          <button type="button" class="small primary" data-ai-act="save-gpt-key">Lưu Key</button>
+          ${gpt.hasApiKey ? `<button type="button" class="small danger" data-ai-act="clear-gpt-key">Xoá Key</button>` : ''}
+        </div>
+      </div>`;
+  }
+
+  // Khung Gemini (#gemini-box)
+  const gemBox = $('#gemini-box');
+  if (gemBox) {
+    const statusBadge = gem.ready
+      ? `<b style="color:var(--ok)">✓ Đã sẵn sàng</b> · <span class="who">${esc(gem.accountLabel || 'Google Gemini')}</span>`
+      : `<b style="color:var(--bad)">Chưa kết nối</b>`;
+    gemBox.innerHTML = `
+      <div>Trạng thái: ${statusBadge}</div>
+      ${gem.cliInstalled ? `<div style="font-size:12.5px;color:var(--muted)">Đã tích hợp <b>Google Gemini CLI</b> có sẵn trên máy — chạy trực tiếp Gemini 2.5 Pro & Flash không tốn phí API.</div>` : ''}
+      <div class="row" style="margin-top:2px">
+        <button type="button" class="small primary" data-ai-act="test" data-provider="gemini">⚡ Kiểm tra Gemini</button>
+        <button type="button" class="small" data-ai-act="toggle-key" data-target="gem-key-form">${gem.hasApiKey ? `🔐 Đổi Gemini API Key (${esc(gem.apiKeyMask)})` : '＋ Nhập Gemini API Key (tuỳ chọn)'}</button>
+      </div>
+      <div id="gem-key-form" class="manual" style="margin-top:4px" ${gem.ready ? 'hidden' : ''}>
+        <div style="font-size:12.5px;margin-bottom:4px"><b>Google AI Studio API Key</b> (tuỳ chọn — lấy miễn phí tại <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>):</div>
+        <div class="row" style="margin-top:0">
+          <input type="password" id="gem-api-key-inp" placeholder="AIzaSy..." autocomplete="new-password" style="flex:1">
+          <button type="button" class="small primary" data-ai-act="save-gem-key">Lưu Key</button>
+          ${gem.hasApiKey ? `<button type="button" class="small danger" data-ai-act="clear-gem-key">Xoá Key</button>` : ''}
+        </div>
+      </div>`;
+  }
+}
+
+$('#default-ai-select')?.addEventListener('change', async (e) => {
+  const aiModel = e.target.value;
+  if (!aiModel) return;
+  try {
+    const r = await api('/api/ai/settings', { method: 'POST', body: { defaultAiModel: aiModel } });
+    cfg.defaultAi = r.defaultAi;
+    populateAiModelSelects();
+    toast(`Đã đặt Model AI mặc định: ${e.target.options[e.target.selectedIndex]?.text || aiModel}`);
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+async function handleAiBoxClick(e) {
+  const b = e.target.closest('[data-ai-act]');
+  if (!b) return;
+  const act = b.dataset.aiAct;
+  try {
+    if (act === 'toggle-key') {
+      const target = document.getElementById(b.dataset.target);
+      if (target) target.hidden = !target.hidden;
+      return;
+    }
+    if (act === 'test') {
+      const provider = b.dataset.provider;
+      const orig = b.textContent;
+      b.disabled = true;
+      b.textContent = '⏳ Đang kiểm tra…';
+      try {
+        const r = await api('/api/ai/test', { method: 'POST', body: { aiModel: provider } });
+        toast(`✓ ${r.providerName} (${r.modelName}) phản hồi tốt (${(r.elapsedMs / 1000).toFixed(1)}s): "${r.reply}"`, 6000);
+      } finally {
+        b.disabled = false;
+        if (document.body.contains(b)) b.textContent = orig;
+      }
+      return;
+    }
+    if (act === 'gpt-login') {
+      b.disabled = true;
+      b.textContent = 'Đang mở trình duyệt…';
+      await api('/api/ai/chatgpt/login', { method: 'POST' });
+      toast('Đã mở cửa sổ đăng nhập ChatGPT trên trình duyệt — sau khi đăng nhập xong hãy bấm "⚡ Kiểm tra ChatGPT"!', 7000);
+      setTimeout(() => loadAiAccounts(), 4000);
+      return;
+    }
+    if (act === 'save-gpt-key') {
+      const key = ($('#gpt-api-key-inp')?.value || '').trim();
+      if (!key) return toast('Hãy dán OpenAI API Key (sk-...)');
+      await api('/api/ai/settings', { method: 'POST', body: { openaiApiKey: key } });
+      toast('✓ Đã lưu OpenAI API Key');
+      await loadAiAccounts();
+      return;
+    }
+    if (act === 'clear-gpt-key') {
+      await api('/api/ai/settings', { method: 'POST', body: { openaiApiKey: '' } });
+      toast('Đã xoá OpenAI API Key');
+      await loadAiAccounts();
+      return;
+    }
+    if (act === 'save-gem-key') {
+      const key = ($('#gem-api-key-inp')?.value || '').trim();
+      if (!key) return toast('Hãy dán Gemini API Key (AIza...)');
+      await api('/api/ai/settings', { method: 'POST', body: { geminiApiKey: key } });
+      toast('✓ Đã lưu Gemini API Key');
+      await loadAiAccounts();
+      return;
+    }
+    if (act === 'clear-gem-key') {
+      await api('/api/ai/settings', { method: 'POST', body: { geminiApiKey: '' } });
+      toast('Đã xoá Gemini API Key');
+      await loadAiAccounts();
+      return;
+    }
+  } catch (err) {
+    toast(err.message, 7000);
+    await loadAiAccounts();
+  }
+}
+$('#gpt-box')?.addEventListener('click', handleAiBoxClick);
+$('#gemini-box')?.addEventListener('click', handleAiBoxClick);
 
 // ---------- Facebook ----------
 async function loadFb() {
@@ -1254,6 +1514,12 @@ $('#view-job').addEventListener('change', async (e) => {
   if (el.id === 'job-consistency' || el.id === 'job-flow-model') {
     const key = { 'job-consistency': 'consistency', 'job-flow-model': 'flowModel' }[el.id];
     await api(`/api/jobs/${currentJob.id}`, { method: 'PATCH', body: { [key]: el.value } }).catch((err) => toast(err.message));
+    return refresh(true);
+  }
+  if (el.id === 'job-ai-model') {
+    await api(`/api/jobs/${currentJob.id}`, { method: 'PATCH', body: { aiModel: el.value } }).catch((err) => toast(err.message));
+    toast('Đã đổi Model AI — bấm "Viết lại kịch bản" để áp dụng model mới', 3500);
+    loadList();
     return refresh(true);
   }
   if (el.id === 'job-videotype' || el.id === 'job-viral-format' || el.id === 'job-traffic-goal') {
@@ -1588,13 +1854,14 @@ $('#btn-agent-detect-new')?.addEventListener('click', async (e) => {
     $('#form-new [name=topic]')?.focus();
     return;
   }
+  const aiModel = $('#new-ai-model-select')?.value || currentNewAiProvider || 'claude';
   const orig = btn.textContent;
   btn.disabled = true;
   btn.textContent = '⏳ Agent đang phân tích…';
   try {
     const r = await api('/api/skills/detect', {
       method: 'POST',
-      body: { userInput, mode: 'ai', taskType: 'video', excludeIds: newSelectedSkills },
+      body: { userInput, mode: 'ai', taskType: 'video', excludeIds: newSelectedSkills, aiModel },
     });
     const list = r.matchedSkills || [];
     if (!list.length) {
@@ -1647,6 +1914,7 @@ $('#btn-extract-skill')?.addEventListener('click', async (e) => {
     $('#form-new [name=topic]')?.focus();
     return;
   }
+  const aiModel = $('#new-ai-model-select')?.value || currentNewAiProvider || 'claude';
   const origText = btn.textContent;
   btn.disabled = true;
   btn.textContent = '⏳ Agent đang nhận diện Skill & trích dữ liệu…';
@@ -1656,7 +1924,7 @@ $('#btn-extract-skill')?.addEventListener('click', async (e) => {
     const curTopic = form.querySelector('[name=topic]').value.trim();
     const res = await api('/api/skills/extract-brief', {
       method: 'POST',
-      body: { skillIds: ids, topic: curTopic, userInput, autoDetect: true },
+      body: { skillIds: ids, topic: curTopic, userInput, autoDetect: true, aiModel },
     });
     if (Array.isArray(res.selectedIds) && res.selectedIds.length) {
       for (const sid of res.selectedIds) {
@@ -1682,7 +1950,7 @@ $('#btn-extract-skill')?.addEventListener('click', async (e) => {
         <div class="chips">${res.suggestedTopics.map((t) => `<button type="button" data-pick-topic="${esc(t)}">${esc(t)}</button>`).join('')}</div>`;
     }
     const usedNames = (res.usedSkills || []).map((s) => (typeof s === 'string' ? s : s.title || s.name)).join(', ');
-    toast(`✓ Agent đã nhận diện & trích xuất dữ liệu từ Skill (${usedNames || 'Skill'}) vào form!`, 5000);
+    toast(`✓ ${res.aiBadge || 'AI'} đã nhận diện & trích xuất dữ liệu từ Skill (${usedNames || 'Skill'}) vào form!`, 5000);
   } catch (err) {
     toast(err.message, 7000);
   } finally {
@@ -1777,13 +2045,14 @@ $('#btn-ask-detect-ai')?.addEventListener('click', async (e) => {
     $('#ask-skill-prompt')?.focus();
     return;
   }
+  const aiModel = $('#ask-ai-model-select')?.value || cfg.defaultAi?.model || 'claude';
   const orig = btn.textContent;
   btn.disabled = true;
   btn.textContent = '⏳ Agent đang chọn Skill…';
   try {
     const r = await api('/api/skills/detect', {
       method: 'POST',
-      body: { userInput: { prompt }, mode: 'ai', taskType: 'any', excludeIds: askSelectedSkills },
+      body: { userInput: { prompt }, mode: 'ai', taskType: 'any', excludeIds: askSelectedSkills, aiModel },
     });
     const list = r.matchedSkills || [];
     if (!list.length) {
@@ -1843,14 +2112,15 @@ $('#btn-ask-skill')?.addEventListener('click', async (e) => {
     $('#ask-skill-select')?.focus();
     return;
   }
+  const aiModel = $('#ask-ai-model-select')?.value || cfg.defaultAi?.model || 'claude';
   const st = $('#ask-skill-status');
   const out = $('#ask-skill-result');
   btn.disabled = true;
-  if (st) st.innerHTML = `<span class="busy"><span class="spin"></span>${ids.length ? 'AI đang đọc hiểu Skill & xử lý yêu cầu' : '🤖 Agent đang tự nhận biết Skill phù hợp & xử lý yêu cầu'} (khoảng 15–45 giây)…</span>`;
+  if (st) st.innerHTML = `<span class="busy"><span class="spin"></span>${ids.length ? `AI (${esc(aiModel)}) đang đọc hiểu Skill & xử lý yêu cầu` : `🤖 Agent (${esc(aiModel)}) đang tự nhận biết Skill phù hợp & xử lý yêu cầu`} (khoảng 15–45 giây)…</span>`;
   try {
     const r = await api('/api/skills/ask', {
       method: 'POST',
-      body: { skillIds: ids, prompt, autoDetect },
+      body: { skillIds: ids, prompt, autoDetect, aiModel },
     });
     const finalSkillIds = r.selectedIds?.length ? r.selectedIds : ids;
     lastAskResult = { ...r, skillIds: finalSkillIds };
@@ -1871,7 +2141,7 @@ $('#btn-ask-skill')?.addEventListener('click', async (e) => {
         <div class="skill-answer-box">
           <div class="job-head" style="margin-bottom:8px">
             <div>
-              <h3 style="font-size:16px">${esc(r.title || 'Kết quả từ AI')}</h3>
+              <h3 style="font-size:16px">${esc(r.title || 'Kết quả từ AI')} ${r.aiBadge ? `<span class="badge" style="margin-left:6px">${esc(r.aiBadge)}</span>` : ''}</h3>
               <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
                 <small class="muted">Đã áp dụng Skill:</small> ${usedBadges}
               </div>
@@ -1884,7 +2154,7 @@ $('#btn-ask-skill')?.addEventListener('click', async (e) => {
           <div class="skill-answer-body">${esc(r.answer || '')}</div>
         </div>`;
     }
-    if (st) st.textContent = '✓ Hoàn tất';
+    if (st) st.textContent = `✓ Hoàn tất (${r.aiBadge || aiModel})`;
   } catch (err) {
     if (st) st.textContent = '';
     toast(err.message, 7000);
@@ -2081,7 +2351,7 @@ function renderSkillDetailBox(sk, fData) {
         </div>
         ${fData.isText
           ? `<textarea id="detail-file-content" class="prompt" rows="18">${esc(fData.content || '')}</textarea>`
-          : `<div class="manual">File nhị phân / tài liệu (<code>${esc(fData.path)}</code> — ${formatBytes(fData.size)}). Khi chạy kịch bản hoặc hỏi AI, Claude sẽ dùng công cụ đọc file trực tiếp để trích xuất dữ liệu từ file này.</div>`}
+          : `<div class="manual">File nhị phân / tài liệu (<code>${esc(fData.path)}</code> — ${formatBytes(fData.size)}). Khi chạy kịch bản hoặc hỏi AI, Model AI sẽ đọc trực tiếp nội dung để trích xuất dữ liệu từ file này.</div>`}
       </div>
     </div>`;
 }
@@ -2216,12 +2486,15 @@ $('#skills-grid')?.addEventListener('click', async (e) => {
   if ($('#traffic-goal-select')) {
     $('#traffic-goal-select').innerHTML = (cfg.trafficGoals || []).map((g) => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('');
   }
+  populateAiModelSelects();
   setNewVideoMode('ads');
   $('#status-pills').innerHTML = `
-    <span class="pill" id="pill-cl">Claude…</span>
+    <span class="pill" id="pill-cl">✦ Claude…</span>
+    <span class="pill" id="pill-gpt">🟢 ChatGPT…</span>
+    <span class="pill" id="pill-gem">♊ Gemini…</span>
     <span class="pill" id="pill-flow">Flow…</span>
     <span class="pill" id="pill-fb">Facebook…</span>`;
-  await Promise.all([loadFb(), loadChromeStatus(), loadSkills(false)]);
+  await Promise.all([loadFb(), loadChromeStatus(), loadSkills(false), loadAiAccounts()]);
   loadClaude(); // không chờ: kiểm tra tài khoản Claude mất vài giây
   durHint();
   await loadList();

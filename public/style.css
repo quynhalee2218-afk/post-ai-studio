@@ -721,6 +721,53 @@ details[open] summary::before { transform: rotate(90deg); }
   font-weight: 700;
 }
 
+/* ---------- Khung chọn Model AI (Claude / ChatGPT / Gemini) ---------- */
+.ai-model-box {
+  border: 1.5px solid rgba(109, 93, 252, 0.32);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #f8f7ff 0%, #f0fdf4 55%, #eff6ff 100%);
+  box-shadow: 0 2px 10px rgba(109, 93, 252, 0.06);
+}
+.ai-model-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+#new-ai-provider-chips button {
+  font-weight: 700;
+  padding: 6px 13px;
+  border-radius: 99px;
+}
+.acc-icon.gpt {
+  background: linear-gradient(135deg, #10a37f 0%, #059669 100%);
+  color: #fff;
+}
+.acc-icon.gem {
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  color: #fff;
+}
+.badge.cl-pill {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid rgba(109, 40, 217, 0.28);
+  font-weight: 700;
+}
+.badge.gpt-pill {
+  background: #d1fae5;
+  color: #047857;
+  border: 1px solid rgba(5, 150, 105, 0.32);
+  font-weight: 700;
+}
+.badge.gem-pill {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.32);
+  font-weight: 700;
+}
+
 /* Màn hình hẹp — đặt cuối file để thắng các quy tắc phía trên */
 @media (max-width: 900px) {
   .acc-grid, .skills-grid, .skill-detail-grid, .video-mode-switcher, .viral-topics-grid { grid-template-columns: minmax(0, 1fr); }
@@ -729,5 +776,6 @@ details[open] summary::before { transform: rotate(90deg); }
   .auto-box .row > button, .auto-box .row > .badge { flex: 1 1 100%; text-align: center; }
   .acc-body .row > button { flex: 1 1 auto; }
 }
+
 
 
