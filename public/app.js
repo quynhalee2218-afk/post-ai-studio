@@ -165,23 +165,30 @@ function renderJob(job) {
   const fileUrl = (rel) => `/files/${job.id}/${rel}`;
 
   const jobSkillIds = Array.isArray(job.input?.skills) ? job.input.skills : [];
-  const usedList = job.usedSkills?.length
+  const rawUsed = job.usedSkills?.length
     ? job.usedSkills
     : jobSkillIds.map((id) => skillsList.find((x) => x.id === id) || { id, name: id });
+  const usedList = rawUsed.map((item) => {
+    if (typeof item === 'string') {
+      const found = skillsList.find((x) => x.id === item || x.title === item || x.name === item);
+      return found ? { id: found.id, name: skTitle(found), auto: false } : { id: item, name: item, auto: false };
+    }
+    return { id: item.id, name: item.title || item.name || item.id, auto: Boolean(item.auto), reason: item.reason || '' };
+  });
 
   const skillBoxHtml = `
     <div class="skill-pick-box" style="margin-top:12px;padding:10px 12px">
       <div class="row" style="margin:0;justify-content:space-between;align-items:center">
         <span style="font-size:13px;font-weight:700;color:var(--ink-2)">📚 Skill AI áp dụng cho kịch bản này:</span>
-        <select id="job-skill-add" style="width:auto;max-width:320px;font-size:12.5px;padding:5px 8px" ${busy ? 'disabled' : ''}>
+        <select id="job-skill-add" style="width:auto;max-width:340px;font-size:12.5px;padding:5px 8px" ${busy ? 'disabled' : ''}>
           <option value="">＋ Gắn thêm Skill rồi Viết lại kịch bản…</option>
-          ${skillsList.map((sk) => `<option value="${esc(sk.id)}" ${jobSkillIds.includes(sk.id) ? 'disabled' : ''}>${esc(sk.name)} (${esc(sk.id)})</option>`).join('')}
+          ${skillsList.filter((s) => !s.builtin).map((sk) => `<option value="${esc(sk.id)}" ${jobSkillIds.includes(sk.id) ? 'disabled' : ''}>${esc(skTitle(sk))} (${esc(sk.id)})</option>`).join('')}
         </select>
       </div>
       <div class="skill-tags" style="margin-top:6px">
         ${usedList.length
-          ? usedList.map((sk) => `<span class="skill-tag">${esc(sk.name || sk.id)} <code>${esc(sk.id)}</code>${!busy && jobSkillIds.includes(sk.id) ? `<button type="button" data-job-rm-skill="${esc(sk.id)}" title="Bỏ Skill này">✕</button>` : ''}</span>`).join('')
-          : '<span class="muted" style="font-size:12.5px">Chưa gắn Skill riêng (chỉ dùng quy tắc Video AI mặc định & các Skill đã ghim 📌).</span>'}
+          ? usedList.map((sk) => `<span class="skill-tag ${sk.auto ? 'auto' : ''}" title="${esc(sk.reason || '')}">${sk.auto ? '🤖 Agent tự chọn: ' : ''}${esc(sk.name)} <code>${esc(sk.id)}</code>${!busy && jobSkillIds.includes(sk.id) ? `<button type="button" data-job-rm-skill="${esc(sk.id)}" title="Bỏ Skill này">✕</button>` : ''}</span>`).join('')
+          : '<span class="muted" style="font-size:12.5px">Chưa gắn Skill riêng (Agent sẽ tự động nhận biết Skill khi bấm Viết lại kịch bản).</span>'}
       </div>
     </div>`;
 
@@ -1212,6 +1219,139 @@ $('#skill-filter-chips')?.addEventListener('click', (e) => {
 });
 
 // Chọn / bỏ chọn Skill ở form Tạo video mới
+$('#new-auto-skill')?.addEventListener('change', (e) => {
+  const inp = $('#new-autoskill-input');
+  if (inp) inp.value = e.target.checked ? 'true' : 'false';
+  if (!e.target.checked) {
+    const detBox = $('#new-agent-detected');
+    if (detBox) detBox.hidden = true;
+  } else {
+    scheduleDetectNewSkills();
+  }
+});
+
+function getNewFormInput() {
+  const form = $('#form-new');
+  if (!form) return {};
+  return {
+    topic: form.querySelector('[name=topic]')?.value?.trim() || '',
+    character: form.querySelector('[name=character]')?.value?.trim() || '',
+    audience: form.querySelector('[name=audience]')?.value?.trim() || '',
+    mustSay: form.querySelector('[name=mustSay]')?.value?.trim() || '',
+    tone: form.querySelector('[name=tone]')?.value?.trim() || '',
+    cta: form.querySelector('[name=cta]')?.value?.trim() || '',
+  };
+}
+
+let detectNewTimer = null;
+function scheduleDetectNewSkills() {
+  clearTimeout(detectNewTimer);
+  if ($('#new-auto-skill') && !$('#new-auto-skill').checked) return;
+  detectNewTimer = setTimeout(async () => {
+    const userInput = getNewFormInput();
+    const combinedText = `${userInput.topic} ${userInput.character} ${userInput.audience} ${userInput.mustSay}`.trim();
+    const box = $('#new-agent-detected');
+    if (!box) return;
+    if (combinedText.length < 3) {
+      box.hidden = true;
+      return;
+    }
+    try {
+      const r = await api('/api/skills/detect', {
+        method: 'POST',
+        body: { userInput, mode: 'fast', taskType: 'video', excludeIds: newSelectedSkills },
+      });
+      const list = r.matchedSkills || [];
+      if (!list.length) {
+        box.hidden = true;
+        return;
+      }
+      box.hidden = false;
+      box.innerHTML = `
+        <div class="agent-detected-head">
+          <span>🤖 Agent tự nhận biết Skill tác vụ khớp với dữ liệu bạn nhập (sẽ tự động nạp khi Viết kịch bản):</span>
+          <button type="button" class="small" data-agent-add-all-new>＋ Gắn cố định tất cả</button>
+        </div>
+        <div class="skill-tags" style="margin-top:4px">
+          ${list.map((sk) => `
+            <span class="skill-tag auto" title="${esc(sk.reason || '')}">
+              🤖 ${esc(sk.title || sk.name)} <code>${esc(sk.id)}</code>
+              <small class="muted" style="display:inline;font-weight:400">(${esc(sk.reason || 'Khớp ngữ cảnh')})</small>
+              <button type="button" data-agent-pick-new="${esc(sk.id)}" title="Gắn cố định vào danh sách chọn" style="color:#065f46;font-weight:800">＋ Gắn</button>
+            </span>`).join('')}
+        </div>`;
+    } catch { /* ignore */ }
+  }, 350);
+}
+
+$('#form-new')?.addEventListener('input', (e) => {
+  if (['topic', 'character', 'audience', 'mustSay', 'tone'].includes(e.target?.name)) {
+    scheduleDetectNewSkills();
+  }
+});
+
+$('#new-agent-detected')?.addEventListener('click', async (e) => {
+  const pick = e.target.closest('[data-agent-pick-new]');
+  if (pick) {
+    const id = pick.dataset.agentPickNew;
+    if (!newSelectedSkills.includes(id)) newSelectedSkills.push(id);
+    syncNewSkillsInput();
+    populateSkillSelects();
+    scheduleDetectNewSkills();
+    toast(`Đã gắn Skill "${id}"`);
+    return;
+  }
+  if (e.target.closest('[data-agent-add-all-new]')) {
+    const badges = [...document.querySelectorAll('#new-agent-detected [data-agent-pick-new]')];
+    for (const b of badges) {
+      const id = b.dataset.agentPickNew;
+      if (id && !newSelectedSkills.includes(id)) newSelectedSkills.push(id);
+    }
+    syncNewSkillsInput();
+    populateSkillSelects();
+    scheduleDetectNewSkills();
+    toast('Đã gắn các Skill do Agent nhận diện!');
+  }
+});
+
+// Nút 🤖 Agent tự nhận diện Skill ở form Tạo video mới
+$('#btn-agent-detect-new')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const userInput = getNewFormInput();
+  const combined = `${userInput.topic} ${userInput.character} ${userInput.audience} ${userInput.mustSay}`.trim();
+  if (!combined) {
+    toast('Hãy nhập vài từ về Chủ đề, Sản phẩm hoặc Nhân vật vào ô bên dưới để Agent nhận diện Skill!');
+    $('#form-new [name=topic]')?.focus();
+    return;
+  }
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Agent đang phân tích…';
+  try {
+    const r = await api('/api/skills/detect', {
+      method: 'POST',
+      body: { userInput, mode: 'ai', taskType: 'video', excludeIds: newSelectedSkills },
+    });
+    const list = r.matchedSkills || [];
+    if (!list.length) {
+      toast('Agent chưa tìm thấy Skill nào khớp sát với dữ liệu này — bạn có thể chọn thủ công ở danh sách.');
+      return;
+    }
+    for (const sk of list) {
+      if (!newSelectedSkills.includes(sk.id)) newSelectedSkills.push(sk.id);
+    }
+    syncNewSkillsInput();
+    populateSkillSelects();
+    scheduleDetectNewSkills();
+    toast(`🤖 Agent đã tự nhận biết & gắn ${list.length} Skill: ${list.map((s) => s.title || s.name).join(', ')}`, 5000);
+  } catch (err) {
+    toast(err.message, 6000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
 $('#new-skill-select')?.addEventListener('change', (e) => {
   const val = e.target.value;
   if (!val) return;
@@ -1219,6 +1359,7 @@ $('#new-skill-select')?.addEventListener('change', (e) => {
   e.target.value = '';
   syncNewSkillsInput();
   populateSkillSelects();
+  scheduleDetectNewSkills();
 });
 $('#new-skill-tags')?.addEventListener('click', (e) => {
   const rm = e.target.closest('[data-rm-new-skill]');
@@ -1226,29 +1367,41 @@ $('#new-skill-tags')?.addEventListener('click', (e) => {
   newSelectedSkills = newSelectedSkills.filter((id) => id !== rm.dataset.rmNewSkill);
   syncNewSkillsInput();
   populateSkillSelects();
+  scheduleDetectNewSkills();
 });
 
-// AI trích dữ liệu từ Skill vào form Tạo video mới
+// AI trích dữ liệu từ Skill vào form Tạo video mới (hỗ trợ cả khi chưa chọn Skill → Agent tự nhận biết theo dữ liệu đã nhập)
 $('#btn-extract-skill')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
-  const pinnedIds = skillsList.filter((s) => s.pinned).map((s) => s.id);
+  const pinnedIds = skillsList.filter((s) => s.pinned && !s.builtin).map((s) => s.id);
   const ids = [...new Set([...newSelectedSkills, ...pinnedIds])];
-  if (!ids.length) {
-    toast('Hãy chọn ít nhất 1 Skill ở ô bên dưới (hoặc ghim Skill) trước khi bấm trích dữ liệu!');
-    $('#new-skill-select')?.focus();
+  const userInput = getNewFormInput();
+  const hasAnyText = Boolean(`${userInput.topic} ${userInput.character} ${userInput.audience} ${userInput.mustSay}`.trim());
+
+  if (!ids.length && !hasAnyText) {
+    toast('Hãy chọn 1 Skill ở ô bên dưới HOẶC nhập vài từ khóa vào ô Chủ đề / Nhân vật để Agent tự nhận diện Skill!');
+    $('#form-new [name=topic]')?.focus();
     return;
   }
   const origText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '⏳ AI đang đọc Skill & trích dữ liệu…';
-  toast('Claude đang đọc kỹ nội dung Skill và các file references để trích xuất dữ liệu…', 45000);
+  btn.textContent = '⏳ Agent đang nhận diện Skill & trích dữ liệu…';
+  toast('Agent đang tự nhận biết Skill phù hợp và đọc kỹ nội dung SKILL.md + references để điền vào form…', 45000);
   try {
     const form = $('#form-new');
     const curTopic = form.querySelector('[name=topic]').value.trim();
     const res = await api('/api/skills/extract-brief', {
       method: 'POST',
-      body: { skillIds: ids, topic: curTopic },
+      body: { skillIds: ids, topic: curTopic, userInput, autoDetect: true },
     });
+    if (Array.isArray(res.selectedIds) && res.selectedIds.length) {
+      for (const sid of res.selectedIds) {
+        if (!newSelectedSkills.includes(sid)) newSelectedSkills.push(sid);
+      }
+      syncNewSkillsInput();
+      populateSkillSelects();
+      scheduleDetectNewSkills();
+    }
     if (res.topic && !curTopic) form.querySelector('[name=topic]').value = res.topic;
     if (res.audience) form.querySelector('[name=audience]').value = res.audience;
     if (res.character) form.querySelector('[name=character]').value = res.character;
@@ -1264,7 +1417,8 @@ $('#btn-extract-skill')?.addEventListener('click', async (e) => {
         <div class="skill-topics-title">💡 Gợi ý chủ đề từ Skill (bấm vào để điền nhanh vào ô Chủ đề):</div>
         <div class="chips">${res.suggestedTopics.map((t) => `<button type="button" data-pick-topic="${esc(t)}">${esc(t)}</button>`).join('')}</div>`;
     }
-    toast(`✓ Đã trích xuất dữ liệu từ ${res.usedSkills?.map((s) => s.name).join(', ') || 'Skill'} vào form!`, 5000);
+    const usedNames = (res.usedSkills || []).map((s) => (typeof s === 'string' ? s : s.title || s.name)).join(', ');
+    toast(`✓ Agent đã nhận diện & trích xuất dữ liệu từ Skill (${usedNames || 'Skill'}) vào form!`, 5000);
   } catch (err) {
     toast(err.message, 7000);
   } finally {
@@ -1284,28 +1438,131 @@ $('#new-skill-topics')?.addEventListener('click', (e) => {
   }
 });
 
-// Chọn / bỏ chọn Skill ở khung Chạy AI trong tab Skill AI
+// Chọn / bỏ chọn & Tự động nhận diện Skill ở khung Chạy AI trong tab Skill AI
+let detectAskTimer = null;
+function scheduleDetectAskSkills() {
+  clearTimeout(detectAskTimer);
+  if ($('#ask-auto-skill') && !$('#ask-auto-skill').checked) {
+    const box = $('#ask-agent-detected');
+    if (box) box.hidden = true;
+    return;
+  }
+  detectAskTimer = setTimeout(async () => {
+    const prompt = ($('#ask-skill-prompt')?.value || '').trim();
+    const box = $('#ask-agent-detected');
+    if (!box) return;
+    if (prompt.length < 3) {
+      box.hidden = true;
+      return;
+    }
+    try {
+      const r = await api('/api/skills/detect', {
+        method: 'POST',
+        body: { userInput: { prompt }, mode: 'fast', taskType: 'any', excludeIds: askSelectedSkills },
+      });
+      const list = r.matchedSkills || [];
+      if (!list.length) {
+        box.hidden = true;
+        return;
+      }
+      box.hidden = false;
+      box.innerHTML = `
+        <div class="agent-detected-head">
+          <span>🤖 Agent tự nhận biết Skill phù hợp cho yêu cầu này (sẽ tự động nạp khi bấm Chạy AI):</span>
+          <button type="button" class="small" data-agent-add-all-ask>＋ Gắn cố định tất cả</button>
+        </div>
+        <div class="skill-tags" style="margin-top:4px">
+          ${list.map((sk) => `
+            <span class="skill-tag auto" title="${esc(sk.reason || '')}">
+              🤖 ${esc(sk.title || sk.name)} <code>${esc(sk.id)}</code>
+              <small class="muted" style="display:inline;font-weight:400">(${esc(sk.reason || '')})</small>
+              <button type="button" data-agent-pick-ask="${esc(sk.id)}" style="color:#065f46;font-weight:800">＋ Gắn</button>
+            </span>`).join('')}
+        </div>`;
+    } catch { /* ignore */ }
+  }, 350);
+}
+
+$('#ask-skill-prompt')?.addEventListener('input', scheduleDetectAskSkills);
+$('#ask-auto-skill')?.addEventListener('change', scheduleDetectAskSkills);
+
+$('#ask-agent-detected')?.addEventListener('click', (e) => {
+  const pick = e.target.closest('[data-agent-pick-ask]');
+  if (pick) {
+    const id = pick.dataset.agentPickAsk;
+    if (!askSelectedSkills.includes(id)) askSelectedSkills.push(id);
+    populateSkillSelects();
+    scheduleDetectAskSkills();
+    return;
+  }
+  if (e.target.closest('[data-agent-add-all-ask]')) {
+    for (const b of document.querySelectorAll('#ask-agent-detected [data-agent-pick-ask]')) {
+      const id = b.dataset.agentPickAsk;
+      if (id && !askSelectedSkills.includes(id)) askSelectedSkills.push(id);
+    }
+    populateSkillSelects();
+    scheduleDetectAskSkills();
+  }
+});
+
+$('#btn-ask-detect-ai')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const prompt = ($('#ask-skill-prompt')?.value || '').trim();
+  if (!prompt) {
+    toast('Hãy nhập yêu cầu vào ô bên trên để Agent phân tích và chọn Skill!');
+    $('#ask-skill-prompt')?.focus();
+    return;
+  }
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Agent đang chọn Skill…';
+  try {
+    const r = await api('/api/skills/detect', {
+      method: 'POST',
+      body: { userInput: { prompt }, mode: 'ai', taskType: 'any', excludeIds: askSelectedSkills },
+    });
+    const list = r.matchedSkills || [];
+    if (!list.length) {
+      toast('Agent chưa tìm thấy Skill khớp sát — bạn có thể chọn thủ công ở ô danh sách.');
+      return;
+    }
+    for (const sk of list) {
+      if (!askSelectedSkills.includes(sk.id)) askSelectedSkills.push(sk.id);
+    }
+    populateSkillSelects();
+    scheduleDetectAskSkills();
+    toast(`🤖 Agent đã chọn ${list.length} Skill: ${list.map((s) => s.title || s.name).join(', ')}`, 4500);
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
 $('#ask-skill-select')?.addEventListener('change', (e) => {
   const val = e.target.value;
   if (!val) return;
   if (!askSelectedSkills.includes(val)) askSelectedSkills.push(val);
   e.target.value = '';
   populateSkillSelects();
+  scheduleDetectAskSkills();
 });
 $('#ask-skill-tags')?.addEventListener('click', (e) => {
   const rm = e.target.closest('[data-rm-ask-skill]');
   if (!rm) return;
   askSelectedSkills = askSelectedSkills.filter((id) => id !== rm.dataset.rmAskSkill);
   populateSkillSelects();
+  scheduleDetectAskSkills();
 });
 $('#ask-quick-prompts')?.addEventListener('click', (e) => {
   const b = e.target.closest('[data-q]');
   if (!b) return;
   const inp = $('#ask-skill-prompt');
-  if (inp) { inp.value = b.dataset.q; inp.focus(); }
+  if (inp) { inp.value = b.dataset.q; inp.focus(); scheduleDetectAskSkills(); }
 });
 
-// Chạy Model AI với các Skill đã chọn
+// Chạy Model AI với các Skill đã chọn (hoặc do Agent tự động nhận diện từ nội dung yêu cầu)
 $('#btn-ask-skill')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   const prompt = ($('#ask-skill-prompt')?.value || '').trim();
@@ -1314,23 +1571,36 @@ $('#btn-ask-skill')?.addEventListener('click', async (e) => {
     $('#ask-skill-prompt')?.focus();
     return;
   }
-  const pinnedIds = skillsList.filter((s) => s.pinned).map((s) => s.id);
+  const autoDetect = $('#ask-auto-skill')?.checked !== false;
+  const pinnedIds = skillsList.filter((s) => s.pinned && !s.builtin).map((s) => s.id);
   const ids = [...new Set([...askSelectedSkills, ...pinnedIds])];
-  if (!ids.length) {
-    toast('Hãy chọn ít nhất 1 Skill để AI đọc kiến thức!');
+  if (!ids.length && !autoDetect) {
+    toast('Hãy chọn ít nhất 1 Skill hoặc bật "🤖 Agent tự động nhận biết Skill"!');
     $('#ask-skill-select')?.focus();
     return;
   }
   const st = $('#ask-skill-status');
   const out = $('#ask-skill-result');
   btn.disabled = true;
-  if (st) st.innerHTML = '<span class="busy"><span class="spin"></span>AI đang đọc hiểu Skill & xử lý yêu cầu (khoảng 15–45 giây)…</span>';
+  if (st) st.innerHTML = `<span class="busy"><span class="spin"></span>${ids.length ? 'AI đang đọc hiểu Skill & xử lý yêu cầu' : '🤖 Agent đang tự nhận biết Skill phù hợp & xử lý yêu cầu'} (khoảng 15–45 giây)…</span>`;
   try {
     const r = await api('/api/skills/ask', {
       method: 'POST',
-      body: { skillIds: ids, prompt },
+      body: { skillIds: ids, prompt, autoDetect },
     });
-    lastAskResult = { ...r, skillIds: ids };
+    const finalSkillIds = r.selectedIds?.length ? r.selectedIds : ids;
+    lastAskResult = { ...r, skillIds: finalSkillIds };
+    if (Array.isArray(r.selectedIds)) {
+      for (const sid of r.selectedIds) {
+        if (!askSelectedSkills.includes(sid)) askSelectedSkills.push(sid);
+      }
+      populateSkillSelects();
+      scheduleDetectAskSkills();
+    }
+    const usedBadges = (r.usedSkills || []).map((s) => {
+      if (typeof s === 'string') return `<b>${esc(s)}</b>`;
+      return `<span class="skill-tag ${s.auto ? 'auto' : ''}" style="font-size:11.5px;padding:2px 8px">${s.auto ? '🤖 Agent tự chọn: ' : '📚 '}${esc(s.title || s.name)} (<code>${esc(s.id)}</code>)</span>`;
+    }).join(' ');
     if (out) {
       out.hidden = false;
       out.innerHTML = `
@@ -1338,7 +1608,9 @@ $('#btn-ask-skill')?.addEventListener('click', async (e) => {
           <div class="job-head" style="margin-bottom:8px">
             <div>
               <h3 style="font-size:16px">${esc(r.title || 'Kết quả từ AI')}</h3>
-              <small class="muted">Đã tham chiếu Skill: ${(r.usedSkills || []).map((s) => `<b>${esc(s.name)}</b> (<code>${esc(s.id)}</code>)`).join(', ')}</small>
+              <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                <small class="muted">Đã áp dụng Skill:</small> ${usedBadges}
+              </div>
             </div>
             <div class="row" style="margin:0">
               <button type="button" class="small" id="btn-copy-ask-ans">📋 Copy kết quả</button>

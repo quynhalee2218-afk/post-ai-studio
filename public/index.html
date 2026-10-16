@@ -41,24 +41,31 @@
           <div class="skill-pick-head">
             <div>
               <span class="field-label">📚 Skill kiến thức & kịch bản áp dụng</span>
-              <small class="muted">Chọn 1 hoặc nhiều Skill (từ Claude đồng bộ sang hoặc bạn tải lên) để AI đọc hiểu nhân vật, sản phẩm, công thức kịch bản.</small>
+              <small class="muted">Agent tự động nhận diện Skill phù hợp theo dữ liệu bạn nhập (Chủ đề, Nhân vật, Sản phẩm…) hoặc bạn có thể chọn thủ công.</small>
             </div>
             <div class="row" style="margin:0">
-              <button type="button" class="small" id="btn-extract-skill" title="AI đọc Skill đang chọn và tự điền Chủ đề, Nhân vật, Tông giọng, Thông tin sản phẩm vào form">✨ AI trích dữ liệu từ Skill vào form</button>
+              <button type="button" class="small" id="btn-agent-detect-new" title="Agent phân tích dữ liệu đang nhập để tự động nhận biết và gắn Skill phù hợp nhất">🤖 Agent tự nhận diện Skill</button>
+              <button type="button" class="small" id="btn-extract-skill" title="AI đọc Skill (đã chọn hoặc tự nhận diện) và tự điền Chủ đề, Nhân vật, Tông giọng, Thông tin sản phẩm vào form">✨ AI trích dữ liệu từ Skill vào form</button>
               <button type="button" class="small" data-goto-skills>Quản lý kho Skill →</button>
             </div>
           </div>
+          <label class="agent-auto-toggle" style="margin-top:8px">
+            <input type="checkbox" id="new-auto-skill" checked style="width:auto">
+            <span>🤖 <b>Agent tự động nhận biết & sử dụng Skill tác vụ theo dữ liệu người dùng</b> <small class="muted" style="display:inline">(Tự động tìm & nạp Skill khớp với Chủ đề / Nhân vật khi viết kịch bản)</small></span>
+          </label>
+          <div id="new-agent-detected" class="agent-detected-box" hidden></div>
           <div class="row" style="margin-top:8px">
             <select id="new-skill-select" style="flex:1;min-width:240px">
-              <option value="">＋ Chọn thêm Skill từ kho để gắn vào kịch bản…</option>
+              <option value="">＋ Chọn thủ công thêm Skill từ kho để gắn vào kịch bản…</option>
             </select>
           </div>
           <div id="new-skill-tags" class="skill-tags"></div>
           <div id="new-skill-topics" class="skill-topics" hidden></div>
           <input type="hidden" name="skills" id="new-skills-input" value="[]">
+          <input type="hidden" name="autoSkill" id="new-autoskill-input" value="true">
         </div>
         <label class="full">Chủ đề / sản phẩm / dịch vụ *
-          <textarea name="topic" rows="3" required placeholder="VD: Khóa học AI cho chủ doanh nghiệp nhỏ, học 4 tuần, làm được trợ lý AI riêng (hoặc bấm ✨ AI trích dữ liệu từ Skill để gợi ý chủ đề)"></textarea>
+          <textarea name="topic" rows="3" required placeholder="VD: Chị Giang pha trà dưỡng nhan An Nhiên buổi sáng / Hoạt hình 3D yến mạch cho bé / Khóa học AI cho chủ doanh nghiệp... (Agent sẽ tự nhận biết Skill tương ứng)"></textarea>
         </label>
         <div class="field">
           <span class="field-label">Số cảnh <small class="muted" style="display:inline">· 8 giây/cảnh</small></span>
@@ -159,10 +166,15 @@
       <!-- Khung chạy AI với Skill (làm kịch bản & các yêu cầu khác) -->
       <div class="card skill-runner-card">
         <h2>✦ Chạy Model AI với Skill (Làm kịch bản, trích dữ liệu & yêu cầu khác)</h2>
-        <p class="muted" style="margin:-6px 0 12px;font-size:13.5px">Chọn 1 hoặc nhiều Skill bên dưới, sau đó yêu cầu AI trích xuất dữ liệu, gợi ý chủ đề, lên kế hoạch nội dung, soạn kịch bản hoặc xử lý công việc theo đúng kiến thức trong Skill.</p>
-        <div class="row" style="margin-top:0">
+        <p class="muted" style="margin:-6px 0 10px;font-size:13.5px">Bạn có thể nhập thẳng yêu cầu bên dưới — <b>Agent sẽ tự động nhận biết và nạp Skill tác vụ phù hợp</b> từ kho Skill — hoặc tự chọn Skill thủ công.</p>
+        <label class="agent-auto-toggle" style="margin-bottom:8px">
+          <input type="checkbox" id="ask-auto-skill" checked style="width:auto">
+          <span>🤖 <b>Agent tự động nhận biết & sử dụng Skill tác vụ theo dữ liệu yêu cầu</b></span>
+        </label>
+        <div id="ask-agent-detected" class="agent-detected-box" hidden></div>
+        <div class="row" style="margin-top:8px">
           <select id="ask-skill-select" style="flex:1;min-width:240px">
-            <option value="">＋ Chọn thêm Skill để nạp cho AI…</option>
+            <option value="">＋ Chọn thủ công thêm Skill để nạp cho AI…</option>
           </select>
         </div>
         <div id="ask-skill-tags" class="skill-tags" style="margin-top:8px"></div>
@@ -172,11 +184,12 @@
           <button type="button" data-q="Dựa trên kiến thức và công thức trong Skill, hãy viết 1 kịch bản chi tiết hoàn chỉnh (chia phân cảnh, lời thoại, bối cảnh) cho chủ đề nổi bật nhất của Skill.">🎬 Viết kịch bản chi tiết từ Skill</button>
           <button type="button" data-q="Tóm tắt các quy tắc cốt lõi, công thức và dữ liệu quan trọng nhất có trong Skill và các file references đính kèm.">📋 Tóm tắt kiến thức trong Skill</button>
         </div>
-        <label style="margin-top:10px">Yêu cầu của bạn dành cho AI (AI sẽ đọc hiểu các Skill đã chọn + file <code>references/</code> đính kèm)
-          <textarea id="ask-skill-prompt" rows="3" placeholder="VD: Dựa vào skill này, hãy viết kịch bản 6 cảnh về chủ đề... hoặc trích dữ liệu sản phẩm / soạn tin nhắn trả lời học viên..."></textarea>
+        <label style="margin-top:10px">Yêu cầu của bạn dành cho AI (Agent tự động nhận biết Skill phù hợp + đọc <code>SKILL.md</code> & <code>references/</code>)
+          <textarea id="ask-skill-prompt" rows="3" placeholder="VD: Viết kịch bản 6 cảnh về trà dưỡng nhan của chị Giang / Hoặc: Lên kế hoạch content cho Taki / Hoặc: Soạn kịch bản tư vấn khóa học..."></textarea>
         </label>
         <div class="row">
           <button id="btn-ask-skill" class="primary">✦ Chạy AI theo Skill</button>
+          <button type="button" id="btn-ask-detect-ai" class="small">🤖 Agent phân tích & chọn Skill</button>
           <span id="ask-skill-status" class="muted" style="font-size:13px"></span>
         </div>
         <div id="ask-skill-result" hidden></div>

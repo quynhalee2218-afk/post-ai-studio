@@ -16,7 +16,7 @@ import * as FBB from './lib/fb-browser.js';
 import { FLOW_MODELS } from './lib/flow-auto.js';
 import * as J from './lib/jobs.js';
 import * as SK from './lib/skills.js';
-import { extractBriefFromSkills, askWithSkills } from './lib/llm.js';
+import { extractBriefFromSkills, askWithSkills, resolveAgentSkills } from './lib/llm.js';
 
 fs.mkdirSync(path.join(config.dataDir, 'uploads'), { recursive: true });
 SK.initSkills();
@@ -147,6 +147,7 @@ app.post('/api/jobs', upload.single('refImage'), wrap(async (req, res) => {
     consistency: b.consistency === 'frames' ? 'frames' : 'identity',
     voice: isVoice(b.voice) ? b.voice : null,
     skills,
+    autoSkill: b.autoSkill !== 'false' && b.autoSkill !== '0' && b.autoSkill !== false,
   };
   const job = await J.createJob(input, ref);
   res.json({ id: job.id });
@@ -241,9 +242,18 @@ app.post('/api/claude/login/code', wrap(async (req, res) => res.json(await CA.su
 app.post('/api/claude/login/cancel', (req, res) => { CA.cancelLogin(String(req.body?.sessionId || '')); res.json({ ok: true }); });
 app.post('/api/claude/logout', wrap(async (req, res) => { await CA.logout(String(req.body?.id || '')); res.json({ ok: true }); }));
 
-// ---------- Kho Skill AI (đồng bộ từ Claude, tải lên, trích xuất dữ liệu & chạy yêu cầu AI) ----------
+// ---------- Kho Skill AI (đồng bộ từ Claude, tải lên, Agent tự động nhận diện Skill, trích xuất dữ liệu & chạy yêu cầu AI) ----------
 app.get('/api/skills', wrap(async (_req, res) => res.json(SK.listSkills())));
 app.post('/api/skills/sync', wrap(async (_req, res) => res.json(SK.syncFromClaude())));
+app.post('/api/skills/detect', wrap(async (req, res) => {
+  const { userInput = {}, mode = 'fast', taskType = 'any', excludeIds = [] } = req.body || {};
+  if (mode === 'ai') {
+    const r = await resolveAgentSkills({ skillIds: excludeIds, userInput, autoDetect: true, taskType, maxAuto: 3 });
+    return res.json({ matchedSkills: r.autoDetected, candidates: r.candidates, costUsd: r.costUsd });
+  }
+  const matchedSkills = SK.detectSkillsForInput(userInput, { limit: 4, taskType, excludeIds });
+  res.json({ matchedSkills });
+}));
 app.post('/api/skills/upload', uploadSkillFiles.array('files', 30), wrap(async (req, res) => {
   res.json(await SK.importUploadedFiles({
     files: req.files || [],
