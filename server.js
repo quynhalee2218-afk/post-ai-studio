@@ -17,11 +17,14 @@ import * as FBB from './lib/fb-browser.js';
 import { FLOW_MODELS } from './lib/flow-auto.js';
 import * as J from './lib/jobs.js';
 import * as SK from './lib/skills.js';
+import * as DC from './lib/daily-content.js';
 import { extractBriefFromSkills, askWithSkills, resolveAgentSkills, generateViralTopics, testAiModel, VIRAL_FORMATS, TRAFFIC_GOALS } from './lib/llm.js';
 import { AI_PROVIDERS, AI_MODELS, getDefaultAiSelection, saveAiSettings, getAllAiStatus, startChatGptBrowserLogin } from './lib/ai-providers.js';
 
 fs.mkdirSync(path.join(config.dataDir, 'uploads'), { recursive: true });
+fs.mkdirSync(path.join(config.dataDir, 'content-campaigns'), { recursive: true });
 SK.initSkills();
+DC.ensureDefaultFtCampaign();
 J.loadAll();
 
 const app = express();
@@ -35,6 +38,8 @@ app.use(express.static(path.join(config.root, 'public'), {
 }));
 // File của từng job (clip, khung hình, video cuối) — chỉ phục vụ trong thư mục data/jobs.
 app.use('/files', express.static(path.join(config.dataDir, 'jobs'), { index: false, dotfiles: 'deny' }));
+// File của chiến dịch Content Hàng Ngày (ảnh render, sản phẩm, logo, tài liệu).
+app.use('/content-files', express.static(path.join(config.dataDir, 'content-campaigns'), { index: false, dotfiles: 'deny' }));
 
 const upload = multer({
   dest: path.join(config.dataDir, 'uploads'),
@@ -75,6 +80,8 @@ app.get('/api/config', (_req, res) => {
     flowModels: FLOW_MODELS,
     viralFormats: VIRAL_FORMATS,
     trafficGoals: TRAFFIC_GOALS,
+    postFormats: DC.POST_FORMATS,
+    funnelStages: DC.FUNNEL_STAGES,
     aiProviders: AI_PROVIDERS,
     aiModels: AI_MODELS,
     defaultAi: getDefaultAiSelection(),
@@ -313,6 +320,58 @@ app.delete('/api/skills/:id', wrap(async (req, res) => res.json(SK.deleteSkill(r
 app.get('/api/skills/:id/file', wrap(async (req, res) => res.json(SK.readSkillFile(req.params.id, String(req.query.path || 'SKILL.md')))));
 app.put('/api/skills/:id/file', wrap(async (req, res) => res.json(SK.writeSkillFile(req.params.id, req.body?.path, req.body?.content))));
 app.delete('/api/skills/:id/file', wrap(async (req, res) => res.json(SK.deleteSkillFile(req.params.id, String(req.query.path || req.body?.path || '')))));
+
+// ---------- Module Tạo Content & Hình Ảnh Lên Lịch Đăng Bài Hàng Ngày Cho Fanpage ----------
+const uploadCampaignFiles = uploadSkillFiles.fields([
+  { name: 'productDoc', maxCount: 1 },
+  { name: 'scheduleDoc', maxCount: 1 },
+  { name: 'productImage', maxCount: 1 },
+  { name: 'logoImage', maxCount: 1 },
+]);
+
+app.get('/api/daily-content/campaigns', wrap(async (_req, res) => res.json(DC.listCampaigns())));
+app.get('/api/daily-content/campaigns/:id', wrap(async (req, res) => res.json(DC.getCampaign(req.params.id))));
+app.post('/api/daily-content/campaigns', uploadCampaignFiles, wrap(async (req, res) => {
+  res.json(await DC.upsertCampaign({
+    ...(req.body || {}),
+    files: req.files || {},
+  }));
+}));
+app.delete('/api/daily-content/campaigns/:id', wrap(async (req, res) => res.json(DC.deleteCampaign(req.params.id))));
+
+// Bước 1: Gọi AI đọc thông tin sản phẩm & đề xuất các tuyến nội dung phễu kéo traffic (TOFU / MOFU / BOFU)
+app.post('/api/daily-content/campaigns/:id/analyze', wrap(async (req, res) => {
+  res.json(await DC.analyzeProductAndProposePillars(req.params.id, req.body || {}));
+}));
+
+// Bước 2: Lựa chọn số bài đăng/ngày -> Đề xuất danh sách tiêu đề bài đăng theo 3 dạng bài
+app.post('/api/daily-content/campaigns/:id/propose-titles', wrap(async (req, res) => {
+  res.json(await DC.proposeTitles(req.params.id, req.body || {}));
+}));
+
+// Bước 3: Viết content theo tiêu đề lựa chọn (tuân thủ 15 quy tắc viết content)
+app.post('/api/daily-content/campaigns/:id/posts/:postId/write', wrap(async (req, res) => {
+  res.json(await DC.generatePostContent(req.params.id, req.params.postId, req.body || {}));
+}));
+
+// Bước 4: Làm ảnh minh họa (tuân thủ 12 quy tắc tạo ảnh: Times New Roman, 1080x1080 / 1080x1350, logo góc cố định, bao bì chuẩn)
+app.post('/api/daily-content/campaigns/:id/posts/:postId/render-images', wrap(async (req, res) => {
+  res.json(await DC.renderPostImagesForItem(req.params.id, req.params.postId, req.body || {}));
+}));
+
+// Cập nhật / chỉnh sửa thủ công tiêu đề, nội dung, comment, thẻ ảnh hoặc giờ đăng của 1 bài
+app.patch('/api/daily-content/campaigns/:id/posts/:postId', wrap(async (req, res) => {
+  res.json(DC.updateDailyPost(req.params.id, req.params.postId, req.body || {}));
+}));
+
+app.delete('/api/daily-content/campaigns/:id/posts/:postId', wrap(async (req, res) => {
+  res.json(DC.deleteDailyPost(req.params.id, req.params.postId));
+}));
+
+// Bước 5: Đăng ngay hoặc Lên lịch đăng bài (Text + Ảnh + Tự động thả Comment) lên Fanpage
+app.post('/api/daily-content/campaigns/:id/posts/:postId/publish', wrap(async (req, res) => {
+  res.json(await DC.publishOrScheduleDailyPost(req.params.id, req.params.postId, req.body || {}));
+}));
 
 // ---------- Lịch đăng ----------
 app.get('/api/posts', (_req, res) => res.json(P.listPosts()));

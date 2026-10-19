@@ -16,7 +16,7 @@
     <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9zM19 14l.95 2.55L22.5 17.5l-2.55.95L19 21l-.95-2.55L15.5 17.5l2.55-.95z"/></svg></span>
     <span>Post AI <b>Studio</b></span>
   </div>
-  <nav class="tabs"><button id="tab-videos" class="tab active">Video</button><button id="tab-skills" class="tab">Skill AI</button><button id="tab-posts" class="tab">Lịch đăng</button><button id="tab-accounts" class="tab">Tài khoản</button></nav>
+  <nav class="tabs"><button id="tab-videos" class="tab active">Video</button><button id="tab-daily" class="tab">📝 Content Hàng Ngày</button><button id="tab-skills" class="tab">Skill AI</button><button id="tab-posts" class="tab">Lịch đăng</button><button id="tab-accounts" class="tab">Tài khoản</button></nav>
   <div id="status-pills" class="pills"></div>
 </header>
 
@@ -24,6 +24,7 @@
   <aside class="side">
     <button id="btn-new" class="primary block big">🛍️ Tạo Video Quảng Cáo</button>
     <button id="btn-new-viral" class="viral-btn block big" style="margin-top:8px">🔥 Tạo Video Viral Traffic</button>
+    <button id="btn-go-daily" class="daily-btn block big" style="margin-top:8px">📝 Content & Ảnh Hàng Ngày</button>
     <button id="side-toggle" class="side-toggle" type="button" aria-label="Danh sách video"></button>
     <div class="side-title">Các video</div>
     <ul id="job-list" class="job-list"></ul>
@@ -200,6 +201,294 @@
 
     <!-- Chi tiết job -->
     <section id="view-job" hidden></section>
+
+    <!-- Module Tạo Content & Hình Ảnh Đăng Bài Hàng Ngày Cho Fanpage -->
+    <section id="view-daily" hidden>
+      <!-- Hero & Pipeline Stepper -->
+      <div class="card daily-hero-card">
+        <div class="job-head" style="align-items:flex-start;margin-bottom:10px">
+          <div class="grow">
+            <span class="eyebrow">✦ Phễu Kéo Traffic Fanpage Hàng Ngày (TOFU · MOFU · BOFU)</span>
+            <h1>Tạo Content & Hình Ảnh Lên Lịch Đăng Bài Hàng Ngày</h1>
+            <p class="muted" style="margin:4px 0 0">Quy trình tự động: <b>Lấy thông tin sản phẩm</b> ➔ <b>AI đọc sản phẩm & Đề xuất tuyến nội dung phễu</b> ➔ <b>Chọn số bài/ngày & Đề xuất tiêu đề (3 dạng bài)</b> ➔ <b>Viết Content (15 quy tắc)</b> ➔ <b>Làm ảnh minh họa Times New Roman (12 quy tắc)</b> ➔ <b>Lên lịch đăng Fanpage</b>.</p>
+          </div>
+          <div style="min-width:255px">
+            <label style="font-size:12px">🧠 Model AI thực hiện:
+              <select id="daily-ai-model-select" style="margin-top:4px;font-weight:600;padding:7px 10px"></select>
+            </label>
+          </div>
+        </div>
+
+        <!-- Thanh quy trình 6 bước trực quan -->
+        <div class="daily-pipeline-bar">
+          <div class="pipe-step on"><b>①</b> Hồ sơ Sản phẩm & Bao bì</div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step on"><b>②</b> Tuyến nội dung Phễu</div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step on"><b>③</b> Số bài/ngày & Đề xuất Tiêu đề</div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step on"><b>④</b> Viết Content (15 quy tắc)</div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step on"><b>⑤</b> Làm Ảnh (12 quy tắc)</div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-step on"><b>⑥</b> Lên lịch Fanpage</div>
+        </div>
+
+        <!-- Chọn chiến dịch / sản phẩm -->
+        <div class="row" style="margin-top:12px;align-items:center;justify-content:space-between">
+          <div class="row" style="margin:0;align-items:center;flex:1">
+            <label style="margin:0;font-size:13px;font-weight:700;min-width:140px">📦 Chiến dịch / Sản phẩm:</label>
+            <select id="daily-campaign-select" style="flex:1;max-width:440px;font-weight:600"></select>
+            <button type="button" id="btn-daily-new-camp" class="small">＋ Tạo sản phẩm / chiến dịch mới</button>
+            <button type="button" id="btn-daily-toggle-profile" class="small">⚙ Hồ sơ SP, Bao bì & Logo</button>
+            <button type="button" id="btn-daily-toggle-rules" class="small">📋 Xem 15 Quy tắc Content & 12 Quy tắc Ảnh</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bảng đối chiếu 15 Quy tắc Viết Content & 12 Quy tắc Tạo Ảnh (ẩn/hiện nhanh) -->
+      <div id="daily-rules-card" class="card" hidden>
+        <div class="job-head" style="margin-bottom:8px">
+          <div class="grow"><h2 style="margin:0">📋 Bộ Quy Tắc Chuẩn Hóa Tự Động (15 Quy Tắc Viết Content & 12 Quy Tắc Tạo Ảnh)</h2></div>
+          <button type="button" class="small" id="btn-daily-close-rules">✕ Đóng</button>
+        </div>
+        <div class="daily-rules-grid">
+          <div class="rule-panel">
+            <h3>✍️ 15 QUY TẮC VIẾT CONTENT (Hệ thống tự động kiểm duyệt)</h3>
+            <ol class="rule-list">
+              <li>Dùng đúng chủ đề, tuyến nội dung, tầng phễu (<b>TOFU / MOFU / BOFU</b>), tiêu đề và mô tả ảnh của dòng lịch.</li>
+              <li>Câu mở đầu dùng <b>đúng nguyên văn tiêu đề</b> và đặt ngay dòng đầu tiên trước nút “Xem thêm”.</li>
+              <li>Bài <b>TOFU</b> và <b>MOFU</b> dài khoảng <b>180–350 chữ</b>.</li>
+              <li>Bài <b>BOFU</b> dài khoảng <b>120–200 chữ</b>, đi thẳng vào nhu cầu, giải pháp và CTA.</li>
+              <li>Mỗi đoạn tối đa <b>3–4 dòng</b>; xuống dòng thoáng, dễ đọc trên Facebook.</li>
+              <li>Emoji vừa phải, <b>tối đa 15 emoji</b> trong một bài (kể cả comment).</li>
+              <li><b>TOFU</b> tập trung nhận diện vấn đề và tương tác, không bán hàng quá sớm.</li>
+              <li><b>MOFU</b> tập trung giải thích, xây dựng niềm tin và kết nối sản phẩm tự nhiên.</li>
+              <li><b>BOFU</b> có CTA nhắn tin Fanpage hoặc bình luận đúng từ khóa ghi trong tiêu đề.</li>
+              <li><b>Tuyệt đối không dùng</b> các từ: <i>chữa khỏi, điều trị khỏi, hết đau hoàn toàn, cam kết khỏi</i>.</li>
+              <li><b>Chỉ sử dụng</b>: <i>hỗ trợ, góp phần, giúp chăm sóc, hỗ trợ giảm triệu chứng</i>.</li>
+              <li>Khi đề cập sản phẩm bắt buộc có câu: <b>“Sản phẩm này không phải là thuốc và không có tác dụng thay thế thuốc chữa bệnh.”</b></li>
+              <li>Không tự tạo giá bán, ưu đãi, chứng nhận, số liệu nghiên cứu hoặc phản hồi khách hàng nếu File 1 không cung cấp.</li>
+              <li>Với số liệu y khoa không có nguồn trong File 1, không bổ sung diễn giải thành cam kết chắc chắn; tình huống ở comment mở đầu bằng <i>“Câu chuyện minh họa:”</i> hoặc <i>“Tình huống minh họa:”</i>.</li>
+              <li>Không lặp lại nguyên văn nội dung của các bài đã đăng trước đó.</li>
+            </ol>
+          </div>
+          <div class="rule-panel">
+            <h3>🎨 12 QUY TẮC TẠO ẢNH MINH HỌA (Render chuẩn Times New Roman)</h3>
+            <ol class="rule-list">
+              <li>Tạo ảnh mới đúng mô tả trong cột “Ảnh minh họa cần chuẩn bị”.</li>
+              <li>Phong cách chuyên nghiệp, đáng tin cậy, hướng tới <b>người Việt 40–65 tuổi</b>.</li>
+              <li>Font chữ có hình thức tương tự <b>Times New Roman</b>, rõ ràng, dễ đọc.</li>
+              <li>Ảnh một khung: tỷ lệ vuông <b>1:1</b>, kích thước <b>1080 × 1080</b>.</li>
+              <li>Nếu mô tả yêu cầu nhiều khung hoặc nhiều ảnh: ưu tiên tỷ lệ <b>4:5</b>, kích thước <b>1080 × 1350</b>.</li>
+              <li>Khi tiêu đề có con số và nội dung cần minh họa từng mục, <b>số khung hoặc số hình tương ứng đúng với con số đó</b> (<code>#01, #02...</code>).</li>
+              <li>Chữ trên ảnh ít, lớn, dễ đọc; không chép toàn bộ caption lên ảnh.</li>
+              <li><b>Logo đặt cố định tại một góc</b>, thống nhất trong cả chiến dịch.</li>
+              <li>Nếu xuất hiện sản phẩm, sử dụng <b>đúng bao bì tham chiếu</b>, không sửa chữ, màu sắc hoặc hình dáng sản phẩm.</li>
+              <li>Sản phẩm không được đặt quá lớn hoặc che nội dung chính (~25–28% chiều cao ảnh).</li>
+              <li>Không tạo hình ảnh gây hiểu nhầm rằng sản phẩm là thuốc hoặc bảo đảm chữa khỏi bệnh (luôn kèm dòng cảnh báo dưới chân ảnh khi có sản phẩm).</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <!-- BƯỚC 1: Lấy thông tin sản phẩm, bao bì, logo & Gọi AI đọc sản phẩm -->
+      <div id="daily-profile-card" class="card">
+        <div class="job-head" style="margin-bottom:10px">
+          <div class="grow">
+            <h2 style="margin:0">① Lấy thông tin sản phẩm · Tài liệu nguồn (File 1) · Bao bì & Logo cố định</h2>
+            <div class="muted" style="font-size:13px">Cung cấp thông tin sản phẩm hoặc chọn Skill có sẵn (mặc định đã nạp sẵn <b>Thực phẩm bảo vệ sức khỏe Bổ Thận FT</b> từ Skill <code>CONTENT FT EVERYDAY</code>).</div>
+          </div>
+          <div class="row" style="margin:0">
+            <button type="button" id="btn-daily-save-camp" class="small">💾 Lưu hồ sơ SP</button>
+            <button type="button" id="btn-daily-analyze" class="primary">🧠 Bước 1: Gọi AI đọc SP & Đề xuất Tuyến Phễu</button>
+          </div>
+        </div>
+
+        <form id="form-daily-campaign" class="grid-form">
+          <input type="hidden" id="dc-id" name="id">
+          <label>Tên chiến dịch / sản phẩm
+            <input id="dc-product-name" name="productName" placeholder="VD: Thực phẩm bảo vệ sức khỏe Bổ Thận FT" required>
+          </label>
+          <label>Thương hiệu / Chữ Logo góc ảnh
+            <input id="dc-brand-name" name="brandName" placeholder="VD: DƯỢC PHẨM FT · BỔ THẬN FT">
+          </label>
+          <label>Liên kết với Skill trong kho (tự động đọc tài liệu & ảnh)
+            <select id="dc-skill-select" name="skillId">
+              <option value="">— Không liên kết Skill (chỉ dùng tài liệu tải lên) —</option>
+            </select>
+          </label>
+          <label>Vị trí đặt Logo cố định (Quy tắc ảnh số 9)
+            <select id="dc-logo-corner" name="logoCorner">
+              <option value="top-right">Góc trên bên phải (Top-Right — Khuyên dùng)</option>
+              <option value="top-left">Góc trên bên trái (Top-Left)</option>
+              <option value="bottom-right">Góc dưới bên phải (Bottom-Right)</option>
+              <option value="bottom-left">Góc dưới bên trái (Bottom-Left)</option>
+            </select>
+          </label>
+          <label>Chân dung khách hàng mục tiêu (Quy tắc ảnh số 2)
+            <input id="dc-audience" name="targetAudience" placeholder="VD: Nam giới & người Việt 40–65 tuổi gặp tình trạng tiểu đêm, đau mỏi lưng gối">
+          </label>
+          <label>Giọng văn Fanpage
+            <input id="dc-voice" name="brandVoice" placeholder="VD: Chuyên nghiệp, điềm đạm, đáng tin cậy, dễ hiểu cho người 40–65 tuổi">
+          </label>
+
+          <!-- Tải lên File 1 Hồ sơ sản phẩm, File 2 Lịch Excel, Ảnh bao bì chuẩn, Ảnh Logo -->
+          <label>📄 Tải lên File 1: Hồ sơ sản phẩm (.docx, .pdf, .txt, .md)
+            <input type="file" id="dc-file-product" name="productDoc" accept=".pdf,.docx,.txt,.md,.json">
+            <small class="muted">Hệ thống tự trích xuất toàn bộ thành phần, công dụng hỗ trợ, lưu ý từ file.</small>
+          </label>
+          <label>📊 Tải lên File 2: Lịch nội dung Excel (.xlsx) <span class="badge">tuỳ chọn</span>
+            <input type="file" id="dc-file-schedule" name="scheduleDoc" accept=".xlsx,.csv">
+            <small class="muted">Nếu có file Excel lịch đăng, AI sẽ ưu tiên bám sát chủ đề và mô tả ảnh trong lịch.</small>
+          </label>
+          <label>📦 Ảnh bao bì sản phẩm tham chiếu (Quy tắc 10 & 11)
+            <input type="file" id="dc-file-prod-img" name="productImage" accept="image/*">
+            <div id="dc-prod-img-preview" class="dc-asset-preview"></div>
+          </label>
+          <label>🏷️ Ảnh Logo thương hiệu cố định ở góc (Quy tắc 9)
+            <input type="file" id="dc-file-logo-img" name="logoImage" accept="image/*">
+            <div id="dc-logo-img-preview" class="dc-asset-preview"></div>
+          </label>
+
+          <label class="full">Nội dung Hồ sơ Sản phẩm nguồn (File 1 — AI dựa 100% vào dữ liệu này, không tự bịa giá bán/ưu đãi/số liệu)
+            <textarea id="dc-product-info" name="productInfo" rows="5" placeholder="Dán thông tin thành phần, công dụng hỗ trợ, đối tượng sử dụng, quy cách của sản phẩm tại đây..."></textarea>
+          </label>
+        </form>
+
+        <!-- Tóm tắt kết quả AI đọc hồ sơ sản phẩm -->
+        <div id="dc-product-summary-box" class="dc-summary-box" hidden></div>
+      </div>
+
+      <!-- BƯỚC 2: Các Tuyến Nội Dung Phễu Kéo Traffic Cho Fanpage (TOFU / MOFU / BOFU) -->
+      <div class="card">
+        <div class="job-head" style="margin-bottom:10px">
+          <div class="grow">
+            <h2 style="margin:0">② Các Tuyến Nội Dung Phễu Kéo Traffic Fanpage (TOFU · MOFU · BOFU)</h2>
+            <div class="muted" style="font-size:13px">Tích chọn các tuyến nội dung bạn muốn lên lịch hôm nay. Phễu chuẩn kết hợp: <b>TOFU</b> (Nhận diện vấn đề & tương tác) ➔ <b>MOFU</b> (Giải thích & xây dựng niềm tin) ➔ <b>BOFU</b> (Giải pháp hỗ trợ & CTA).</div>
+          </div>
+          <div class="row" style="margin:0">
+            <button type="button" id="btn-daily-select-all-pillars" class="small">☑ Chọn tất cả tuyến</button>
+          </div>
+        </div>
+        <div id="dc-pillars-grid" class="dc-pillars-grid"></div>
+      </div>
+
+      <!-- BƯỚC 3: Lựa chọn Số bài đăng/ngày · 3 Dạng đăng bài · Đề xuất Tiêu đề -->
+      <div class="card">
+        <div class="job-head" style="margin-bottom:10px">
+          <div class="grow">
+            <h2 style="margin:0">③ Lựa chọn Số Bài Đăng/Ngày · 3 Dạng Bài & Đề Xuất Tiêu Đề</h2>
+            <div class="muted" style="font-size:13px">Chọn số lượng bài đăng mỗi ngày và các dạng bài muốn kết hợp, sau đó bấm <b>✨ AI Đề xuất Tiêu đề</b>.</div>
+          </div>
+        </div>
+
+        <!-- 3 Dạng đăng bài mẫu trực quan -->
+        <div class="dc-format-cards" id="dc-format-cards">
+          <label class="dc-format-card on" data-fmt="text_comment">
+            <input type="checkbox" value="text_comment" checked>
+            <div class="dc-fmt-badge">Dạng 1 · Giống Ảnh 1 mẫu</div>
+            <div class="dc-fmt-title">🟪 Text nền (1 câu tiêu đề — thả nội dung ở Comment)</div>
+            <p class="dc-fmt-desc">Bài chính chỉ đăng 1 ảnh nền chữ lớn ghi câu tiêu đề gây tò mò cực mạnh (1080×1080). Toàn bộ nội dung giải thích chia thành <b>3–4 comment</b> thả ngay dưới bài đăng để kéo tương tác & thời gian đọc.</p>
+          </label>
+
+          <label class="dc-format-card on" data-fmt="text_cards">
+            <input type="checkbox" value="text_cards" checked>
+            <div class="dc-fmt-badge">Dạng 2 · Giống Ảnh 2 mẫu</div>
+            <div class="dc-fmt-title">🟧 Text nền + Hình ảnh mô tả từng mục (<code>#01, #02…</code>)</div>
+            <p class="dc-fmt-desc">1 câu tiêu đề thu hút có con số ở đầu (VD: <i>“4 thói quen…”, “3 dấu hiệu…”</i>) kèm bộ ảnh thẻ <b>1080×1350 (4:5)</b> đánh số <code>#01, #02...</code> tương ứng đúng với con số trong tiêu đề.</p>
+          </label>
+
+          <label class="dc-format-card on" data-fmt="content_image">
+            <input type="checkbox" value="content_image" checked>
+            <div class="dc-fmt-badge">Dạng 3 · Giống Ảnh 3 mẫu</div>
+            <div class="dc-fmt-title">🟩 Content Text đầy đủ + Ảnh minh họa</div>
+            <p class="dc-fmt-desc">Caption hoàn chỉnh chuẩn phễu (TOFU/MOFU 180–350 chữ, BOFU 120–200 chữ, mở đầu bằng tiêu đề trước nút Xem thêm) kèm ảnh minh họa chuẩn Times New Roman & bao bì sản phẩm tham chiếu.</p>
+          </label>
+        </div>
+
+        <div class="grid-form" style="margin-top:14px">
+          <label>Số bài đăng / ngày
+            <select id="dc-posts-per-day">
+              <option value="1">1 bài / ngày</option>
+              <option value="2">2 bài / ngày (Sáng · Tối)</option>
+              <option value="3" selected>3 bài / ngày (Sáng 08:00 · Trưa 12:30 · Tối 19:30 — Chuẩn TOFU-MOFU-BOFU)</option>
+              <option value="4">4 bài / ngày (08:00 · 12:00 · 17:30 · 20:30)</option>
+              <option value="5">5 bài / ngày</option>
+              <option value="6">6 bài / ngày</option>
+            </select>
+          </label>
+          <label>Số ngày muốn lên lịch
+            <select id="dc-days-count">
+              <option value="1" selected>1 ngày (Hôm nay / Ngày chọn)</option>
+              <option value="2">2 ngày liên tiếp</option>
+              <option value="3">3 ngày liên tiếp</option>
+              <option value="5">5 ngày</option>
+              <option value="7">7 ngày (Cả tuần)</option>
+            </select>
+          </label>
+          <label>Ngày bắt đầu đăng bài
+            <input type="date" id="dc-start-date">
+          </label>
+          <label>Kênh / Sheet lịch Excel tham chiếu (nếu có)
+            <select id="dc-sheet-select">
+              <option value="">— Tự động phối hợp tất cả tuyến phễu —</option>
+              <option value="FB1-Sức khỏe nam trung niên">FB1 — Sức khỏe nam trung niên</option>
+              <option value="FB2-Đêm yên giấc tròn">FB2 — Đêm yên giấc tròn</option>
+              <option value="FB3-Góc nhìn dược liệu">FB3 — Góc nhìn dược liệu</option>
+            </select>
+          </label>
+          <label class="full">Ghi chú / Yêu cầu chủ đề cụ thể (tuỳ chọn)
+            <div class="row" style="margin:4px 0 0">
+              <input id="dc-custom-instruction" placeholder="VD: Ưu tiên chủ đề tiểu đêm mùa lạnh và đau mỏi thắt lưng cho nam giới 50 tuổi..." style="flex:1">
+              <button type="button" id="btn-daily-propose-titles" class="primary">✨ Bước 2: AI Đề xuất Tiêu đề bài đăng</button>
+              <button type="button" id="btn-daily-add-manual" class="small">＋ Thêm 1 bài thủ công</button>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- BƯỚC 4, 5, 6: Danh sách Tiêu đề đã đề xuất -> Viết Content -> Làm Ảnh Minh Họa -> Lên Lịch Fanpage -->
+      <div class="card">
+        <div class="job-head" style="margin-bottom:10px">
+          <div class="grow">
+            <h2 style="margin:0">④ ⑤ ⑥ Danh Sách Bài Đăng: Viết Content (15 Quy tắc) · Làm Ảnh Minh Họa (12 Quy tắc) · Lên Lịch Fanpage</h2>
+            <div id="dc-posts-stats" class="muted" style="font-size:13px">Chưa có bài đăng nào — hãy bấm <b>✨ AI Đề xuất Tiêu đề bài đăng</b> ở trên.</div>
+          </div>
+          <div class="row" style="margin:0">
+            <button type="button" id="btn-daily-batch-write" class="primary">✍️ Viết Content các bài đã chọn</button>
+            <button type="button" id="btn-daily-batch-render" class="viral-btn">🎨 Làm Ảnh các bài đã chọn</button>
+            <button type="button" id="btn-daily-batch-schedule" class="small">📅 Lên lịch Fanpage hàng loạt</button>
+          </div>
+        </div>
+
+        <!-- Bộ lọc nhanh danh sách bài -->
+        <div class="row" style="margin-bottom:12px;justify-content:space-between">
+          <div class="chips" id="dc-post-filter-chips">
+            <button type="button" data-filter="all" class="on">Tất cả bài</button>
+            <button type="button" data-filter="text_comment">🟪 Dạng 1: Text nền + Comment</button>
+            <button type="button" data-filter="text_cards">🟧 Dạng 2: Text nền + Bộ ảnh #01..</button>
+            <button type="button" data-filter="content_image">🟩 Dạng 3: Content + Ảnh</button>
+            <button type="button" data-filter="TOFU">TOFU</button>
+            <button type="button" data-filter="MOFU">MOFU</button>
+            <button type="button" data-filter="BOFU">BOFU</button>
+          </div>
+          <div class="row" style="margin:0;align-items:center">
+            <label style="margin:0;font-size:12.5px;display:flex;align-items:center;gap:6px">
+              Tông màu ảnh:
+              <select id="dc-render-theme" style="width:auto;padding:5px 10px;font-size:12.5px">
+                <option value="twilight">🌌 Tím Đêm / Nâu Trầm (Chuẩn mẫu)</option>
+                <option value="crimson">🍷 Đỏ Đô Sức Khỏe</option>
+                <option value="herbal_gold">🌿 Vàng Dược Liệu Cổ Truyền</option>
+                <option value="navy">💠 Xanh Navy Chuyên Gia</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div id="dc-posts-list" class="dc-posts-list"></div>
+      </div>
+    </section>
 
     <!-- Kho Skill AI -->
     <section id="view-skills" hidden>

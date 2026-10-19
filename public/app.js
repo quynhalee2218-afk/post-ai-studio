@@ -33,14 +33,15 @@ function toast(msg, ms = 4000) {
 }
 
 function show(view) {
-  for (const v of ['new', 'job', 'empty', 'skills', 'posts', 'accounts']) {
+  for (const v of ['new', 'job', 'empty', 'daily', 'skills', 'posts', 'accounts']) {
     const el = $(`#view-${v}`);
     if (el) el.hidden = v !== view;
   }
+  $('#tab-daily')?.classList.toggle('active', view === 'daily');
   $('#tab-skills')?.classList.toggle('active', view === 'skills');
   $('#tab-posts').classList.toggle('active', view === 'posts');
   $('#tab-accounts').classList.toggle('active', view === 'accounts');
-  $('#tab-videos').classList.toggle('active', !['skills', 'posts', 'accounts'].includes(view));
+  $('#tab-videos').classList.toggle('active', !['daily', 'skills', 'posts', 'accounts'].includes(view));
   document.body.dataset.view = view;
   $('.side').classList.remove('open'); // mobile: mở video xong thì gấp danh sách lại
   if (typeof sideLabel === 'function') sideLabel();
@@ -90,7 +91,7 @@ function updateNewAiModelUI() {
 
 function populateAiModelSelects(keepCurrent = false) {
   const defVal = cfg.defaultAi?.combined || 'claude:claude-sonnet-4-5';
-  for (const selId of ['#new-ai-model-select', '#ask-ai-model-select', '#default-ai-select']) {
+  for (const selId of ['#new-ai-model-select', '#ask-ai-model-select', '#daily-ai-model-select', '#default-ai-select']) {
     const el = $(selId);
     if (!el) continue;
     const targetVal = (keepCurrent && el.value) ? el.value : defVal;
@@ -2598,6 +2599,739 @@ $('#skills-grid')?.addEventListener('click', async (e) => {
   }
 });
 
+// ---------- Module Tạo Content & Hình Ảnh Đăng Bài Hàng Ngày Cho Fanpage ----------
+let dailyCampaigns = [];
+let currentCampaign = null;
+let selectedPillarIds = [];
+let dailyPostFilter = 'all';
+
+function getDailyAiModel() {
+  return $('#daily-ai-model-select')?.value || cfg.defaultAi?.combined || 'claude';
+}
+
+function populateDailySkillSelect() {
+  const sel = $('#dc-skill-select');
+  if (!sel) return;
+  const curVal = currentCampaign?.skillId ?? sel.value ?? '';
+  sel.innerHTML = `<option value="">— Không liên kết Skill (chỉ dùng tài liệu tải lên) —</option>` +
+    skillsList.map((s) => `<option value="${esc(s.id)}" ${s.id === curVal ? 'selected' : ''}>${s.pinned ? '📌 ' : ''}${esc(skTitle(s))} (${esc(s.id)})</option>`).join('');
+}
+
+async function loadDailyCampaigns(selectId = '') {
+  dailyCampaigns = await api('/api/daily-content/campaigns');
+  const sel = $('#daily-campaign-select');
+  if (!sel) return;
+  const targetId = selectId || currentCampaign?.id || dailyCampaigns[0]?.id || '';
+  sel.innerHTML = dailyCampaigns.map((c) => `
+    <option value="${esc(c.id)}" ${c.id === targetId ? 'selected' : ''}>
+      📦 ${esc(c.productName || c.name)} (${(c.posts || []).length} bài · ${(c.pillars || []).length} tuyến phễu)
+    </option>`).join('');
+  currentCampaign = dailyCampaigns.find((c) => c.id === targetId) || dailyCampaigns[0] || null;
+  renderCurrentDailyCampaign();
+}
+
+function renderCurrentDailyCampaign() {
+  populateDailySkillSelect();
+  const camp = currentCampaign;
+  if (!camp) return;
+
+  $('#dc-id').value = camp.id || '';
+  $('#dc-product-name').value = camp.productName || camp.name || '';
+  $('#dc-brand-name').value = camp.brandName || camp.logoText || '';
+  if ($('#dc-skill-select')) $('#dc-skill-select').value = camp.skillId || '';
+  if ($('#dc-logo-corner')) $('#dc-logo-corner').value = camp.logoCorner || 'top-right';
+  $('#dc-audience').value = camp.targetAudience || '';
+  $('#dc-voice').value = camp.brandVoice || '';
+  $('#dc-product-info').value = camp.productInfo || '';
+  if ($('#dc-posts-per-day') && camp.postsPerDay) {
+    $('#dc-posts-per-day').value = String(camp.postsPerDay);
+  }
+  if ($('#dc-start-date') && !$('#dc-start-date').value) {
+    $('#dc-start-date').value = new Date().toISOString().slice(0, 10);
+  }
+
+  // Hiển thị ảnh bao bì tham chiếu & logo góc
+  const prodPrev = $('#dc-prod-img-preview');
+  if (prodPrev) {
+    prodPrev.innerHTML = camp.productImageUrl
+      ? `<img src="${esc(camp.productImageUrl)}" alt="Bao bì tham chiếu"><div><b style="font-size:12px;color:#047857">✓ Đã có ảnh bao bì chuẩn</b><div class="muted" style="font-size:11.5px">Tự động tách nền & ghép góc phải dưới (Quy tắc 10, 11)</div></div>`
+      : `<span class="muted" style="font-size:12px">Chưa tải ảnh bao bì riêng</span>`;
+  }
+  const logoPrev = $('#dc-logo-img-preview');
+  if (logoPrev) {
+    logoPrev.innerHTML = camp.logoUrl
+      ? `<img src="${esc(camp.logoUrl)}" alt="Logo thương hiệu"><div><b style="font-size:12px;color:#047857">✓ Đã có ảnh Logo riêng</b><div class="muted" style="font-size:11.5px">Đặt cố định tại góc ${esc(camp.logoCorner || 'top-right')}</div></div>`
+      : `<span class="muted" style="font-size:12px">Đang dùng nhãn chữ cố định: <b>${esc(camp.logoText || camp.brandName || camp.productName)}</b> tại góc ${esc(camp.logoCorner || 'top-right')}</span>`;
+  }
+
+  // Hiển thị tóm tắt sản phẩm nếu đã phân tích
+  const sumBox = $('#dc-product-summary-box');
+  if (sumBox) {
+    if (camp.productSummary && (camp.productSummary.ingredients || camp.productSummary.approvedBenefits)) {
+      sumBox.hidden = false;
+      sumBox.innerHTML = `
+        <div style="font-weight:800;color:#065f46;margin-bottom:4px">✅ Hồ sơ Sản phẩm chuẩn hóa từ File 1 (${esc(camp.productName)}):</div>
+        ${camp.productSummary.ingredients ? `<div>• <b>Thành phần nguồn:</b> ${esc(camp.productSummary.ingredients)}</div>` : ''}
+        ${camp.productSummary.approvedBenefits ? `<div>• <b>Công dụng hỗ trợ được phép nêu:</b> ${esc(camp.productSummary.approvedBenefits)}</div>` : ''}
+        ${camp.productSummary.contraindications ? `<div>• <b>Lưu ý / Thận trọng:</b> ${esc(camp.productSummary.contraindications)}</div>` : ''}
+        <div style="margin-top:4px;color:#92400e;font-size:12px">⚠️ <b>Quy tắc bắt buộc khi nhắc sản phẩm:</b> “Sản phẩm này không phải là thuốc và không có tác dụng thay thế thuốc chữa bệnh.”</div>`;
+    } else {
+      sumBox.hidden = true;
+    }
+  }
+
+  // Render các Tuyến nội dung Phễu (TOFU / MOFU / BOFU)
+  const pillars = Array.isArray(camp.pillars) ? camp.pillars : [];
+  if (!selectedPillarIds.length || !selectedPillarIds.some((id) => pillars.some((p) => p.id === id))) {
+    selectedPillarIds = pillars.map((p) => p.id);
+  }
+  renderDailyPillars();
+  renderDailyPostsList();
+}
+
+function renderDailyPillars() {
+  const grid = $('#dc-pillars-grid');
+  if (!grid) return;
+  const pillars = currentCampaign?.pillars || [];
+  if (!pillars.length) {
+    grid.innerHTML = `<div class="muted" style="grid-column:1/-1;padding:18px;text-align:center">Chưa có tuyến nội dung phễu. Hãy bấm <b>🧠 Bước 1: Gọi AI đọc SP & Đề xuất Tuyến Phễu</b> ở phía trên!</div>`;
+    return;
+  }
+  grid.innerHTML = pillars.map((p) => {
+    const isOn = selectedPillarIds.includes(p.id);
+    const funnel = String(p.funnel || 'TOFU').toUpperCase();
+    return `
+      <div class="dc-pillar-card ${isOn ? 'on' : ''}" data-pillar-id="${esc(p.id)}">
+        <div class="row" style="margin:0;justify-content:space-between;align-items:center">
+          <div class="row" style="margin:0;gap:6px;align-items:center">
+            <input type="checkbox" ${isOn ? 'checked' : ''} style="width:auto;pointer-events:none">
+            <span class="dc-funnel-badge ${esc(funnel)}">${esc(funnel)}</span>
+            ${p.ratio ? `<span class="badge" style="font-size:11px">${esc(p.ratio)}</span>` : ''}
+          </div>
+          <code style="font-size:11.5px">${esc(p.id)}</code>
+        </div>
+        <div style="font-weight:800;font-size:14px;color:var(--ink)">${esc(p.name)}</div>
+        <div class="muted" style="font-size:12.5px;line-height:1.45">${esc(p.desc || '')}</div>
+        ${Array.isArray(p.sampleHooks) && p.sampleHooks.length ? `
+          <div style="margin-top:4px;padding-top:6px;border-top:1px dashed var(--line);font-size:12px;color:var(--ink-2)">
+            <b>Hook mẫu:</b> “${esc(p.sampleHooks[0])}”
+          </div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function formatPostTypeLabel(postType) {
+  if (postType === 'text_comment') return '🟪 Dạng 1: Text nền + Thả Comment';
+  if (postType === 'text_cards') return '🟧 Dạng 2: Text nền + Bộ ảnh #01..#0N';
+  return '🟩 Dạng 3: Content Text + Ảnh minh họa';
+}
+
+function renderDailyPostsList() {
+  const listEl = $('#dc-posts-list');
+  const statsEl = $('#dc-posts-stats');
+  if (!listEl) return;
+  const allPosts = currentCampaign?.posts || [];
+  const selectedCount = allPosts.filter((p) => p.selected !== false).length;
+  const contentReadyCount = allPosts.filter((p) => p.caption).length;
+  const imgReadyCount = allPosts.filter((p) => p.images?.length).length;
+  const schedCount = allPosts.filter((p) => ['scheduled', 'published'].includes(p.status)).length;
+
+  if (statsEl) {
+    statsEl.innerHTML = allPosts.length
+      ? `Tổng <b>${allPosts.length} bài</b> (Đang chọn: <b>${selectedCount}</b> · Đã viết Content: <b>${contentReadyCount}</b> · Đã làm Ảnh: <b>${imgReadyCount}</b> · Đã lên lịch/đăng: <b>${schedCount}</b>)`
+      : `Chưa có bài đăng nào — hãy bấm <b>✨ Bước 2: AI Đề xuất Tiêu đề bài đăng</b> ở khung trên.`;
+  }
+
+  const filtered = allPosts.filter((p) => {
+    if (dailyPostFilter === 'all') return true;
+    if (['TOFU', 'MOFU', 'BOFU'].includes(dailyPostFilter)) return p.funnel === dailyPostFilter;
+    return p.postType === dailyPostFilter;
+  });
+
+  if (!filtered.length) {
+    listEl.innerHTML = `<div class="muted" style="text-align:center;padding:28px;border:1px dashed var(--line);border-radius:12px">Không có bài đăng nào trong bộ lọc này. Hãy bấm <b>✨ Bước 2: AI Đề xuất Tiêu đề bài đăng</b> để tạo danh sách tiêu đề mới!</div>`;
+    return;
+  }
+
+  listEl.innerHTML = filtered.map((p, idx) => {
+    const isSel = p.selected !== false;
+    const targetWords = p.funnel === 'BOFU' ? '120–200 chữ' : '180–350 chữ';
+    const stBadge = p.status === 'published'
+      ? '<span class="badge ok">✓ Đã đăng Fanpage</span>'
+      : p.status === 'scheduled'
+        ? `<span class="badge scheduled">📅 Đã hẹn giờ (${esc(p.date)} ${esc(p.scheduledTime || '08:00')})</span>`
+        : p.images?.length
+          ? '<span class="badge ok">🎨 Đã có Content & Ảnh</span>'
+          : p.caption
+            ? '<span class="badge running">✍️ Đã viết Content</span>'
+            : '<span class="badge">💡 Đề xuất tiêu đề</span>';
+
+    return `
+      <div class="dc-post-card ${isSel ? 'is-selected' : ''}" data-post-id="${esc(p.id)}">
+        <div class="dc-post-head">
+          <div class="row" style="margin:0;align-items:center;gap:8px">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:800">
+              <input type="checkbox" data-dc-field="selected" ${isSel ? 'checked' : ''} style="width:auto">
+              <span>Bài #${idx + 1}</span>
+            </label>
+            <input type="date" data-dc-field="date" value="${esc(p.date || '')}" style="width:142px;padding:4px 8px;font-size:12.5px">
+            <input type="time" data-dc-field="scheduledTime" value="${esc(p.scheduledTime || '08:00')}" style="width:108px;padding:4px 8px;font-size:12.5px">
+            <select data-dc-field="funnel" style="width:auto;padding:4px 8px;font-size:12px;font-weight:700">
+              <option value="TOFU" ${p.funnel === 'TOFU' ? 'selected' : ''}>TOFU (180–350 chữ)</option>
+              <option value="MOFU" ${p.funnel === 'MOFU' ? 'selected' : ''}>MOFU (180–350 chữ)</option>
+              <option value="BOFU" ${p.funnel === 'BOFU' ? 'selected' : ''}>BOFU (120–200 chữ)</option>
+            </select>
+            <select data-dc-field="postType" style="width:auto;padding:4px 8px;font-size:12px;font-weight:700">
+              <option value="text_comment" ${p.postType === 'text_comment' ? 'selected' : ''}>🟪 Dạng 1: Text nền + Thả Comment</option>
+              <option value="text_cards" ${p.postType === 'text_cards' ? 'selected' : ''}>🟧 Dạng 2: Text nền + Bộ ảnh #01..#0N</option>
+              <option value="content_image" ${p.postType === 'content_image' ? 'selected' : ''}>🟩 Dạng 3: Content Text + Ảnh minh họa</option>
+            </select>
+            <span class="badge">${esc(p.pillarName || p.pillarId || 'Tuyến phễu')}</span>
+          </div>
+          <div class="row" style="margin:0;align-items:center;gap:6px">
+            ${p.aiBadge ? `<span class="badge cl-pill" style="font-size:11px">${esc(p.aiBadge)}</span>` : ''}
+            ${stBadge}
+            <button type="button" class="small danger" data-dc-act="delete" title="Xoá bài này">🗑</button>
+          </div>
+        </div>
+
+        <!-- Tiêu đề & Mô tả ảnh minh họa cần chuẩn bị -->
+        <div class="grid-form" style="margin-top:10px">
+          <label class="full" style="margin:0">
+            <div class="row" style="margin:0 0 4px;justify-content:space-between">
+              <span style="font-size:12.5px;font-weight:800;color:var(--ink)">📌 Tiêu đề bài đăng (Quy tắc 2: Đặt nguyên văn ở câu mở đầu trước nút “Xem thêm”):</span>
+              <label style="margin:0;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" data-dc-field="includeProduct" ${p.includeProduct ? 'checked' : ''} style="width:auto">
+                <span>📦 Ghép bao bì sản phẩm chuẩn & câu cảnh báo vào ảnh</span>
+              </label>
+            </div>
+            <input data-dc-field="title" value="${esc(p.title || '')}" style="font-weight:700;font-size:14.5px;color:#1e1b4b">
+          </label>
+          <label class="full" style="margin:0">
+            <span style="font-size:12px;font-weight:700;color:var(--ink-2)">🎨 Mô tả “Ảnh minh họa cần chuẩn bị” (Quy tắc ảnh 1–12):</span>
+            <input data-dc-field="imageSpec" value="${esc(p.imageSpec || '')}" style="font-size:13px">
+          </label>
+        </div>
+
+        <!-- Thanh nút hành động Bước 3 (Viết Content) -> Bước 4 (Làm Ảnh) -> Bước 5 (Lên lịch Fanpage) -->
+        <div class="row" style="margin-top:10px;justify-content:space-between;align-items:center;background:#f8fafc;padding:8px 12px;border-radius:10px;border:1px solid var(--line)">
+          <div class="row" style="margin:0;gap:8px">
+            <button type="button" class="small primary" data-dc-act="write">✍️ Bước 3: Viết Content (15 quy tắc)</button>
+            <button type="button" class="small viral-btn" data-dc-act="render">🎨 Bước 4: Làm Ảnh Minh Họa (Times New Roman)</button>
+            <button type="button" class="small" data-dc-act="save-edit">💾 Lưu chỉnh sửa</button>
+          </div>
+          <div class="row" style="margin:0;gap:6px">
+            <button type="button" class="small primary" data-dc-act="schedule">📅 Hẹn giờ đăng Fanpage</button>
+            <button type="button" class="small" data-dc-act="publish">🚀 Đăng ngay</button>
+            <button type="button" class="small" data-dc-act="draft">📝 Lưu nháp FB</button>
+          </div>
+        </div>
+
+        <!-- Khung làm việc 2 cột: Cột trái = Content & Comment/Thẻ · Cột phải = Bộ Ảnh Minh Họa đã tạo -->
+        <div class="dc-work-grid">
+          <div>
+            <div class="row" style="margin:0 0 6px;justify-content:space-between;align-items:center">
+              <b style="font-size:13px">📝 Nội dung bài đăng (${esc(formatPostTypeLabel(p.postType))})</b>
+              <div class="row" style="margin:0;gap:6px">
+                <span class="badge" title="Quy tắc 3 & 4: Độ dài chuẩn ${esc(targetWords)}">📏 ${p.wordCount || 0} chữ (Chuẩn: ${esc(targetWords)})</span>
+                <span class="badge" title="Quy tắc 6: Tối đa 15 emoji">😊 ${p.emojiCount || 0}/15 emoji</span>
+              </div>
+            </div>
+            <textarea data-dc-field="caption" rows="${p.postType === 'text_comment' ? 3 : 9}" placeholder="Bấm '✍️ Bước 3: Viết Content' để AI viết nội dung tuân thủ 15 quy tắc..." style="font-size:13.5px;line-height:1.55">${esc(p.caption || '')}</textarea>
+
+            ${p.postType === 'text_comment' ? `
+              <div style="margin-top:8px">
+                <b style="font-size:12.5px;color:#5b21b6">💬 Chuỗi Comment thả dưới bài đăng (Dạng 1 — Kéo tương tác sâu):</b>
+                <div class="dc-comments-box">
+                  ${[0, 1, 2, 3].map((ci) => `
+                    <div class="dc-comment-item">
+                      <span class="dc-comment-num">Cmt #${ci + 1}</span>
+                      <textarea data-dc-comment-idx="${ci}" rows="3" placeholder="Nội dung Comment #${ci + 1}..." style="font-size:12.8px">${esc(p.comments?.[ci] || '')}</textarea>
+                    </div>`).join('')}
+                </div>
+              </div>` : ''}
+
+            ${p.postType === 'text_cards' && Array.isArray(p.cards) && p.cards.length ? `
+              <div style="margin-top:8px">
+                <b style="font-size:12.5px;color:#c2410c">🗂️ Nội dung chữ ngắn trên từng khung ảnh (${p.cards.length} khung tương ứng tiêu đề — Quy tắc 7, 8):</b>
+                <div class="dc-cards-editor">
+                  ${p.cards.map((c, ci) => `
+                    <div class="dc-card-edit-row" data-dc-card-idx="${ci}">
+                      <div class="row" style="margin:0 0 4px;gap:6px">
+                        <span class="badge scheduled">${esc(c.badge || `#0${ci + 1}`)}</span>
+                        <input data-dc-card-title="${ci}" value="${esc(c.cardTitle || '')}" placeholder="Tiêu đề mục ngắn gọn" style="flex:1;padding:4px 8px;font-weight:700;font-size:12.5px">
+                      </div>
+                      <textarea data-dc-card-points="${ci}" rows="2" style="font-size:12.5px" placeholder="Mỗi dòng 1 ý ngắn gọn trên ảnh...">${esc((c.points || []).join('\n'))}</textarea>
+                    </div>`).join('')}
+                </div>
+              </div>` : ''}
+
+            ${p.postType === 'content_image' ? `
+              <div style="margin-top:8px">
+                <b style="font-size:12.5px;color:#047857">🖼️ Chữ tóm tắt ngắn gọn in trên Ảnh minh họa (Quy tắc 8 — ít chữ, chữ lớn dễ đọc):</b>
+                <input data-dc-field="imageHeadline" value="${esc(p.imageHeadline || p.title || '')}" placeholder="Tiêu đề ngắn trên ảnh" style="margin-top:4px;font-weight:700;font-size:13px">
+                <textarea data-dc-field="imagePointsText" rows="3" placeholder="Mỗi dòng 1 ý cốt lõi ngắn gọn hiển thị trên ảnh minh họa..." style="margin-top:4px;font-size:12.5px">${esc((p.imagePoints || []).join('\n'))}</textarea>
+              </div>` : ''}
+          </div>
+
+          <!-- Cột phải: Bộ Ảnh Minh Họa đã tạo -->
+          <div>
+            <div class="row" style="margin:0 0 6px;justify-content:space-between;align-items:center">
+              <b style="font-size:13px">🎨 Ảnh minh họa (${(p.images || []).length} ảnh · Times New Roman)</b>
+              ${p.fbPermalink ? `<a href="${esc(p.fbPermalink)}" target="_blank" rel="noopener" class="badge ok">🔗 Xem bài trên FB</a>` : ''}
+            </div>
+            ${(p.images || []).length ? `
+              <div class="dc-image-gallery">
+                ${p.images.map((im, ii) => `
+                  <div class="dc-img-thumb">
+                    <a href="${esc(im.url)}" target="_blank" rel="noopener" title="Bấm để xem ảnh kích thước thật (${im.width}×${im.height})">
+                      <img src="${esc(im.url)}?t=${Date.now()}" alt="Ảnh ${ii + 1}" loading="lazy">
+                    </a>
+                    <div class="dc-img-meta">
+                      <span>#${ii + 1} (${im.width}×${im.height})</span>
+                      <a href="${esc(im.url)}" download="${esc(im.file || `post-${ii + 1}.jpg`)}">⬇ Tải</a>
+                    </div>
+                  </div>`).join('')}
+              </div>` : `
+              <div class="muted" style="border:1.5px dashed var(--line);border-radius:12px;padding:32px 16px;text-align:center;font-size:13px">
+                Chưa tạo ảnh cho bài này.<br>Bấm <b>🎨 Bước 4: Làm Ảnh Minh Họa</b> để hệ thống thiết kế ảnh chuẩn Times New Roman (${p.postType === 'text_cards' ? '4:5 · 1080×1350 nhiều khung' : '1:1 · 1080×1080'}), tự gắn Logo góc & bao bì sản phẩm tham chiếu!
+              </div>`}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openDailyView() {
+  currentId = null;
+  stopPoll();
+  loadList();
+  show('daily');
+  loadDailyCampaigns();
+}
+
+$('#tab-daily')?.addEventListener('click', openDailyView);
+$('#btn-go-daily')?.addEventListener('click', openDailyView);
+
+$('#btn-daily-toggle-rules')?.addEventListener('click', () => {
+  const box = $('#daily-rules-card');
+  if (box) box.hidden = !box.hidden;
+});
+$('#btn-daily-close-rules')?.addEventListener('click', () => {
+  const box = $('#daily-rules-card');
+  if (box) box.hidden = true;
+});
+$('#btn-daily-toggle-profile')?.addEventListener('click', () => {
+  const box = $('#daily-profile-card');
+  if (box) box.hidden = !box.hidden;
+});
+
+$('#daily-campaign-select')?.addEventListener('change', (e) => {
+  const id = e.target.value;
+  currentCampaign = dailyCampaigns.find((c) => c.id === id) || null;
+  renderCurrentDailyCampaign();
+});
+
+$('#btn-daily-new-camp')?.addEventListener('click', () => {
+  const name = prompt('Nhập tên sản phẩm / chiến dịch mới:', '');
+  if (!name) return;
+  currentCampaign = {
+    id: '',
+    name: name.trim(),
+    productName: name.trim(),
+    brandName: '',
+    skillId: '',
+    logoCorner: 'top-right',
+    targetAudience: 'Người Việt 40–65 tuổi',
+    brandVoice: 'Chuyên nghiệp, đáng tin cậy, gần gũi với người Việt 40–65 tuổi',
+    productInfo: '',
+    pillars: [],
+    posts: [],
+    postsPerDay: 3,
+  };
+  renderCurrentDailyCampaign();
+  $('#daily-profile-card').hidden = false;
+  $('#dc-product-info')?.focus();
+  toast('Hãy điền thông tin sản phẩm hoặc tải File 1 lên rồi bấm "💾 Lưu hồ sơ SP"!');
+});
+
+async function saveDailyCampaignForm() {
+  const form = $('#form-daily-campaign');
+  const fd = new FormData(form);
+  fd.set('postsPerDay', $('#dc-posts-per-day')?.value || '3');
+  const saved = await api('/api/daily-content/campaigns', { method: 'POST', body: fd });
+  currentCampaign = saved;
+  await loadDailyCampaigns(saved.id);
+  return saved;
+}
+
+$('#btn-daily-save-camp')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await saveDailyCampaignForm();
+    toast('✓ Đã lưu hồ sơ sản phẩm, bao bì & cấu hình Logo!');
+  } catch (err) {
+    toast(err.message, 6000);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Bước 1: Gọi AI đọc thông tin sản phẩm & Đề xuất các tuyến nội dung phễu kéo traffic
+$('#btn-daily-analyze')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ AI đang đọc hồ sơ SP & lập tuyến phễu…';
+  toast('Model AI đang đọc thông tin sản phẩm (File 1 / Skill) để đề xuất các tuyến nội dung phễu TOFU · MOFU · BOFU…', 40000);
+  try {
+    const saved = await saveDailyCampaignForm();
+    const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(saved.id)}/analyze`, {
+      method: 'POST',
+      body: { aiModel: getDailyAiModel() },
+      timeoutMs: 300000,
+    });
+    currentCampaign = r.campaign;
+    selectedPillarIds = (currentCampaign.pillars || []).map((p) => p.id);
+    await loadDailyCampaigns(currentCampaign.id);
+    toast(`✓ ${r.aiBadge} đã phân tích xong sản phẩm & đề xuất ${(currentCampaign.pillars || []).length} tuyến nội dung phễu!`, 5000);
+  } catch (err) {
+    toast(err.message, 7000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+// Chọn / bỏ chọn Tuyến nội dung phễu
+$('#dc-pillars-grid')?.addEventListener('click', (e) => {
+  const card = e.target.closest('[data-pillar-id]');
+  if (!card) return;
+  const id = card.dataset.pillarId;
+  if (selectedPillarIds.includes(id)) {
+    selectedPillarIds = selectedPillarIds.filter((x) => x !== id);
+  } else {
+    selectedPillarIds.push(id);
+  }
+  renderDailyPillars();
+});
+
+$('#btn-daily-select-all-pillars')?.addEventListener('click', () => {
+  selectedPillarIds = (currentCampaign?.pillars || []).map((p) => p.id);
+  renderDailyPillars();
+});
+
+// Chọn / bỏ chọn 3 Dạng đăng bài
+$('#dc-format-cards')?.addEventListener('change', (e) => {
+  const card = e.target.closest('.dc-format-card');
+  if (card && e.target.type === 'checkbox') {
+    card.classList.toggle('on', e.target.checked);
+  }
+});
+
+// Bước 2: Đề xuất danh sách Tiêu đề bài đăng theo Số bài/ngày & 3 dạng bài
+$('#btn-daily-propose-titles')?.addEventListener('click', async (e) => {
+  if (!currentCampaign?.id) {
+    await saveDailyCampaignForm();
+  }
+  const btn = e.currentTarget;
+  const orig = btn.textContent;
+  const postTypes = [...document.querySelectorAll('#dc-format-cards input[type="checkbox"]:checked')].map((el) => el.value);
+  if (!postTypes.length) {
+    toast('Hãy tích chọn ít nhất 1 trong 3 Dạng đăng bài!');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '⏳ AI đang đề xuất tiêu đề…';
+  toast('AI đang lập danh sách tiêu đề bài đăng theo số bài/ngày và tuyến nội dung phễu…', 45000);
+  try {
+    const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/propose-titles`, {
+      method: 'POST',
+      body: {
+        postsPerDay: Number($('#dc-posts-per-day')?.value) || 3,
+        daysCount: Number($('#dc-days-count')?.value) || 1,
+        startDate: $('#dc-start-date')?.value || '',
+        selectedPillarIds,
+        postTypes,
+        sheetName: $('#dc-sheet-select')?.value || '',
+        customInstruction: $('#dc-custom-instruction')?.value || '',
+        aiModel: getDailyAiModel(),
+      },
+      timeoutMs: 300000,
+    });
+    currentCampaign = r.campaign;
+    dailyPostFilter = 'all';
+    renderCurrentDailyCampaign();
+    toast(`✓ Đã đề xuất thêm ${r.added.length} tiêu đề bài đăng mới!`, 5000);
+  } catch (err) {
+    toast(err.message, 7000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+// Thêm 1 bài thủ công
+$('#btn-daily-add-manual')?.addEventListener('click', async () => {
+  const title = prompt('Nhập câu tiêu đề bài đăng (sẽ đặt ngay dòng đầu tiên trước nút Xem thêm):', '');
+  if (!title) return;
+  if (!currentCampaign?.id) await saveDailyCampaignForm();
+  const newPost = {
+    id: `dp-${Date.now()}`,
+    date: $('#dc-start-date')?.value || new Date().toISOString().slice(0, 10),
+    scheduledTime: '08:00',
+    pillarId: 'P1',
+    pillarName: currentCampaign.pillars?.[0]?.name || 'P1 · Nhận diện vấn đề',
+    funnel: 'TOFU',
+    postType: 'text_comment',
+    title: title.trim(),
+    cardCount: 4,
+    includeProduct: false,
+    imageSpec: `Thiết kế chuẩn người Việt 40–65 tuổi, font Times New Roman rõ ràng cho tiêu đề: ${title.trim()}`,
+    selected: true,
+    status: 'proposed',
+    caption: '',
+    comments: [],
+    cards: [],
+    imagePoints: [],
+    images: [],
+  };
+  currentCampaign.posts = [newPost, ...(currentCampaign.posts || [])];
+  renderDailyPostsList();
+  await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(newPost.id)}`, {
+    method: 'PATCH',
+    body: newPost,
+  }).catch(() => {});
+});
+
+// Bộ lọc danh sách bài đăng
+$('#dc-post-filter-chips')?.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-filter]');
+  if (!b) return;
+  dailyPostFilter = b.dataset.filter;
+  for (const x of document.querySelectorAll('#dc-post-filter-chips button')) {
+    x.classList.toggle('on', x.dataset.filter === dailyPostFilter);
+  }
+  renderDailyPostsList();
+});
+
+function collectPostCardPatch(cardEl) {
+  const patch = {};
+  for (const inp of cardEl.querySelectorAll('[data-dc-field]')) {
+    const f = inp.dataset.dcField;
+    if (inp.type === 'checkbox') patch[f] = inp.checked;
+    else if (f === 'imagePointsText') {
+      patch.imagePoints = inp.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    } else {
+      patch[f] = inp.value;
+    }
+  }
+  const cmtEls = [...cardEl.querySelectorAll('[data-dc-comment-idx]')];
+  if (cmtEls.length) {
+    patch.comments = cmtEls.map((el) => el.value.trim()).filter(Boolean);
+  }
+  const cardRows = [...cardEl.querySelectorAll('[data-dc-card-idx]')];
+  if (cardRows.length) {
+    patch.cards = cardRows.map((row, idx) => ({
+      badge: `#0${idx + 1}`,
+      cardTitle: row.querySelector(`[data-dc-card-title="${idx}"]`)?.value?.trim() || `MỤC #0${idx + 1}`,
+      points: (row.querySelector(`[data-dc-card-points="${idx}"]`)?.value || '').split('\n').map((s) => s.trim()).filter(Boolean),
+    }));
+  }
+  return patch;
+}
+
+// Thao tác trên từng bài đăng trong #dc-posts-list
+$('#dc-posts-list')?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-dc-act]');
+  if (!btn || !currentCampaign) return;
+  const cardEl = btn.closest('[data-post-id]');
+  if (!cardEl) return;
+  const postId = cardEl.dataset.postId;
+  const act = btn.dataset.dcAct;
+  const orig = btn.textContent;
+
+  try {
+    if (act === 'delete') {
+      if (!confirm('Xoá mục bài đăng này khỏi danh sách?')) return;
+      const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(postId)}`, { method: 'DELETE' });
+      currentCampaign = r.campaign;
+      renderDailyPostsList();
+      return;
+    }
+
+    // Trước khi thực hiện bất kỳ bước nào, lưu các thay đổi trên form của thẻ đó
+    const patch = collectPostCardPatch(cardEl);
+    await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(postId)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+
+    if (act === 'save-edit') {
+      const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}`);
+      currentCampaign = r;
+      renderDailyPostsList();
+      toast('✓ Đã lưu nội dung chỉnh sửa & kiểm duyệt 15 quy tắc!');
+      return;
+    }
+
+    if (act === 'write') {
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang viết Content…';
+      toast('AI đang viết Content theo đúng 15 quy tắc & tiêu đề đã chọn…', 35000);
+      const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(postId)}/write`, {
+        method: 'POST',
+        body: { aiModel: getDailyAiModel() },
+        timeoutMs: 300000,
+      });
+      currentCampaign = r.campaign;
+      renderDailyPostsList();
+      toast(`✓ Đã viết xong Content (${r.post.wordCount} chữ · ${r.post.emojiCount} emoji)!`, 4500);
+      return;
+    }
+
+    if (act === 'render') {
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang vẽ ảnh…';
+      const theme = $('#dc-render-theme')?.value || 'twilight';
+      const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(postId)}/render-images`, {
+        method: 'POST',
+        body: { theme },
+        timeoutMs: 120000,
+      });
+      currentCampaign = r.campaign;
+      renderDailyPostsList();
+      toast(`✓ Đã tạo xong ${r.post.images.length} ảnh minh họa chuẩn Times New Roman!`, 4500);
+      return;
+    }
+
+    if (['schedule', 'publish', 'draft'].includes(act)) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang gửi lên Fanpage…';
+      toast('Đang tải bộ ảnh và nội dung lên Fanpage Facebook…', 60000);
+      const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(postId)}/publish`, {
+        method: 'POST',
+        body: { mode: act },
+        timeoutMs: 180000,
+      });
+      currentCampaign = r.campaign;
+      renderDailyPostsList();
+      toast(act === 'publish' ? '🚀 Đã đăng bài lên Fanpage thành công!' : act === 'schedule' ? '📅 Đã lên lịch hẹn giờ đăng bài lên Fanpage!' : '📝 Đã lưu nháp trên Fanpage!', 6000);
+    }
+  } catch (err) {
+    toast(err.message, 7000);
+  } finally {
+    if (document.body.contains(btn)) {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  }
+});
+
+// Đổi trạng thái chọn hoặc dạng bài trực tiếp trên thẻ
+$('#dc-posts-list')?.addEventListener('change', async (e) => {
+  const f = e.target.dataset?.dcField;
+  if (!f || !currentCampaign) return;
+  const cardEl = e.target.closest('[data-post-id]');
+  if (!cardEl) return;
+  const postId = cardEl.dataset.postId;
+  if (['selected', 'postType', 'funnel', 'includeProduct', 'date', 'scheduledTime'].includes(f)) {
+    const patch = collectPostCardPatch(cardEl);
+    const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(postId)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+    currentCampaign = r.campaign;
+    if (['postType', 'funnel', 'selected'].includes(f)) renderDailyPostsList();
+  }
+});
+
+// Thao tác Hàng Loạt: Viết Content / Làm Ảnh / Lên Lịch tất cả bài đã tích chọn
+$('#btn-daily-batch-write')?.addEventListener('click', async (e) => {
+  const selected = (currentCampaign?.posts || []).filter((p) => p.selected !== false);
+  if (!selected.length) return toast('Hãy tích chọn ít nhất 1 bài đăng trong danh sách!');
+  const btn = e.currentTarget;
+  const orig = btn.textContent;
+  btn.disabled = true;
+  try {
+    for (let i = 0; i < selected.length; i++) {
+      const p = selected[i];
+      btn.textContent = `⏳ Đang viết (${i + 1}/${selected.length})…`;
+      toast(`Đang viết Content bài ${i + 1}/${selected.length}: "${p.title.slice(0, 45)}..."`, 30000);
+      const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(p.id)}/write`, {
+        method: 'POST',
+        body: { aiModel: getDailyAiModel() },
+        timeoutMs: 300000,
+      });
+      currentCampaign = r.campaign;
+      renderDailyPostsList();
+    }
+    toast(`✓ Đã viết xong Content cho toàn bộ ${selected.length} bài đăng!`, 5000);
+  } catch (err) {
+    toast(err.message, 7000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+$('#btn-daily-batch-render')?.addEventListener('click', async (e) => {
+  const selected = (currentCampaign?.posts || []).filter((p) => p.selected !== false);
+  if (!selected.length) return toast('Hãy tích chọn ít nhất 1 bài đăng trong danh sách!');
+  const btn = e.currentTarget;
+  const orig = btn.textContent;
+  const theme = $('#dc-render-theme')?.value || 'twilight';
+  btn.disabled = true;
+  try {
+    for (let i = 0; i < selected.length; i++) {
+      const p = selected[i];
+      btn.textContent = `⏳ Đang làm ảnh (${i + 1}/${selected.length})…`;
+      const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(p.id)}/render-images`, {
+        method: 'POST',
+        body: { theme },
+        timeoutMs: 120000,
+      });
+      currentCampaign = r.campaign;
+      renderDailyPostsList();
+    }
+    toast(`✓ Đã tạo xong bộ ảnh minh họa cho ${selected.length} bài đăng!`, 5000);
+  } catch (err) {
+    toast(err.message, 7000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+$('#btn-daily-batch-schedule')?.addEventListener('click', async (e) => {
+  const selected = (currentCampaign?.posts || []).filter((p) => p.selected !== false && p.caption);
+  if (!selected.length) return toast('Hãy viết Content cho các bài đã chọn trước khi lên lịch hàng loạt!');
+  if (!confirm(`Lên lịch hẹn giờ đăng Fanpage cho ${selected.length} bài đã chọn?`)) return;
+  const btn = e.currentTarget;
+  const orig = btn.textContent;
+  btn.disabled = true;
+  try {
+    for (let i = 0; i < selected.length; i++) {
+      const p = selected[i];
+      btn.textContent = `⏳ Đang lên lịch (${i + 1}/${selected.length})…`;
+      const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(p.id)}/publish`, {
+        method: 'POST',
+        body: { mode: 'schedule' },
+        timeoutMs: 180000,
+      });
+      currentCampaign = r.campaign;
+      renderDailyPostsList();
+    }
+    toast(`✓ Đã lên lịch đăng Fanpage thành công cho ${selected.length} bài!`, 6000);
+  } catch (err) {
+    toast(err.message, 7000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
 // ---------- khởi động ----------
 (async () => {
   cfg = await api('/api/config');
@@ -2624,7 +3358,7 @@ $('#skills-grid')?.addEventListener('click', async (e) => {
   durHint();
   await loadList();
   // Người dùng đã tự chuyển tab trong lúc trang đang tải → không tự mở video đầu tiên đè lên.
-  if (!$('#view-posts').hidden || !$('#view-accounts').hidden || !$('#view-skills').hidden || currentId) return;
+  if (!$('#view-posts').hidden || !$('#view-accounts').hidden || !$('#view-skills').hidden || !$('#view-daily').hidden || currentId) return;
   const first = $('#job-list li[data-id]');
   if (first) openJob(first.dataset.id);
   else show('new');
