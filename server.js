@@ -26,7 +26,13 @@ J.loadAll();
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
-app.use(express.static(path.join(config.root, 'public')));
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
+app.use(express.static(path.join(config.root, 'public'), {
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+}));
 // File của từng job (clip, khung hình, video cuối) — chỉ phục vụ trong thư mục data/jobs.
 app.use('/files', express.static(path.join(config.dataDir, 'jobs'), { index: false, dotfiles: 'deny' }));
 
@@ -248,7 +254,7 @@ app.post('/api/fbchrome/check', wrap(async (_req, res) => {
 app.post('/api/fbchrome/close', wrap(async (_req, res) => { await FBC.close(); res.json({ ok: true }); }));
 
 app.post('/api/jobs/:id/cancel', action((job) => J.cancelGenerate(job)));
-app.post('/api/jobs/:id/stitch', action((job, b) => J.startStitch(job, { removeWatermark: b.removeWatermark !== false })));
+app.post('/api/jobs/:id/stitch', action((job, b) => J.startStitch(job, { removeWatermark: b.removeWatermark !== false, force: Boolean(b.force) })));
 app.post('/api/jobs/:id/facebook', action((job, b) => J.startFacebook(job, { mode: b.mode, scheduledAt: b.scheduledAt })));
 
 // ---------- Quản lý đa Model AI (Claude · ChatGPT · Gemini) ----------

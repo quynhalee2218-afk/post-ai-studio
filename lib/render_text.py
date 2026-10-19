@@ -115,6 +115,10 @@ def render(item, font_path):
 
 
 def main():
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     spec = json.load(sys.stdin)
     for item in spec["items"]:
         render(item, spec["font"])

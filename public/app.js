@@ -10,7 +10,11 @@ let fbEditingApp = false;      // đang mở form đổi App ID/Secret
 const LIMIT = 4000; // Flow cắt prompt sau 4000 ký tự
 
 async function api(url, opts = {}) {
+  const isGet = !opts.method || opts.method.toUpperCase() === 'GET';
+  const timeoutMs = opts.timeoutMs || (isGet ? 15000 : 120000);
   const res = await fetch(url, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined,
     ...opts,
     headers: opts.body && !(opts.body instanceof FormData) ? { 'Content-Type': 'application/json' } : undefined,
     body: opts.body && !(opts.body instanceof FormData) ? JSON.stringify(opts.body) : opts.body,
@@ -431,18 +435,19 @@ function stopPoll() { clearTimeout(pollTimer); pollTimer = null; }
 async function refresh(force = false) {
   stopPoll();
   if (!currentId) return;
-  let nextMs = 5000;
+  let nextMs = 4000;
   try {
     const job = await api(`/api/jobs/${currentId}`);
-    nextMs = job.busy ? 2500 : 6000;
-    const editing = document.activeElement?.matches?.('#view-job textarea, #view-job input[type="text"], #view-job input[type="number"], #view-job input[type="datetime-local"], #view-job select, #view-job input:not([type])');
+    nextMs = job.busy ? 1800 : 5000;
+    const editing = document.activeElement?.matches?.('#view-job textarea, #view-job input[type="text"], #view-job input[type="number"], #view-job input:not([type])');
     const majorChange = !currentJob
       || job.stage !== currentJob.stage
-      || Boolean(job.busy) !== Boolean(currentJob.busy)
+      || (job.busy || '') !== (currentJob.busy || '')
+      || (job.error || '') !== (currentJob.error || '')
       || job.final?.file !== currentJob.final?.file
       || job.scenes.filter((s) => s.clip).length !== currentJob.scenes.filter((s) => s.clip).length;
     if (force || majorChange || !editing) {
-      if (force || !currentJob || job.updatedAt !== currentJob.updatedAt) {
+      if (force || majorChange || !currentJob || job.updatedAt !== currentJob.updatedAt) {
         const wasBusy = currentJob?.busy;
         currentJob = job;
         renderJob(job);
@@ -450,11 +455,21 @@ async function refresh(force = false) {
       }
     }
   } catch (e) {
-    nextMs = 4000;
+    nextMs = 3000;
   } finally {
-    if (currentId) pollTimer = setTimeout(refresh, nextMs);
+    if (currentId) pollTimer = setTimeout(() => refresh(false), nextMs);
   }
 }
+
+window.addEventListener('focus', () => {
+  if (currentId && !$('#view-job')?.hidden) refresh(true);
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && currentId && !$('#view-job')?.hidden) refresh(true);
+});
+setInterval(() => {
+  if (currentId && !$('#view-job')?.hidden && !pollTimer) refresh(false);
+}, 5000);
 
 function renderJob(job) {
   const busy = Boolean(job.busy);
@@ -634,29 +649,36 @@ function renderJob(job) {
     </div>`;
   }).join('');
 
-  const allClips = job.scenes.every((s) => s.clip);
+  const allClips = job.scenes.length > 0 && job.scenes.every((s) => s.clip);
+  const missingScenes = job.scenes.filter((s) => !s.clip).map((s, idx) => (s.index ?? idx) + 1);
+  const isStitching = /^Đang ghép video/i.test(job.busy || '');
   const prevMode = $('#fb-mode')?.value || 'schedule';
   const prevWhenEl = $('#fb-when');
   const prevWhenVal = prevWhenEl?.value && (new Date(prevWhenEl.value).getTime() >= Date.now() + 28 * 60 * 1000) ? prevWhenEl.value : defaultWhen();
   const final = `
     <div class="card">
-      <h2>Ghép video & đăng Facebook</h2>
+      <h2>Ghép video & đăng Facebook ${isStitching ? `<span class="busy" style="margin-left:auto"><span class="spin"></span>${esc(job.busy)}</span>` : ''}</h2>
       <div class="final">
         <div class="player">
           ${job.final ? `<video src="${fileUrl(job.final.file)}" controls preload="metadata" playsinline></video>
-                         <div class="row"><a href="${fileUrl(job.final.file)}" download>Tải MP4</a> · ${job.final.duration.toFixed(1)}s</div>`
-                      : `<div class="ph">Chưa ghép</div>`}
+                         <div class="row"><a href="${fileUrl(job.final.file)}" download>⬇ Tải MP4 về máy</a> · ${Number(job.final.duration || total).toFixed(1)}s</div>`
+                      : isStitching
+                        ? `<div class="ph"><div style="display:grid;gap:8px;justify-items:center"><span class="busy"><span class="spin"></span>${esc(job.busy)}</span><small class="muted">Đang nối ${job.scenes.length} cảnh (1080×1920, xoá watermark) — vui lòng chờ 10–20 giây…</small></div></div>`
+                        : allClips
+                          ? `<div class="ph"><div><b>Đã đủ ${job.scenes.length}/${job.scenes.length} cảnh</b><small class="muted" style="margin-top:4px">Bấm <b>"Ghép video"</b> bên cạnh để xuất MP4 hoàn chỉnh</small></div></div>`
+                          : `<div class="ph"><div>Chưa ghép<small class="muted" style="margin-top:4px">Còn thiếu clip cảnh ${missingScenes.join(', ')}</small></div></div>`}
         </div>
         <div>
           <p class="muted" style="margin-top:0">Độ dài dự kiến ≈ ${total.toFixed(1)}s (Reel cho phép 3–90s). Ghép sẽ xoá watermark "Veo", cắt đầu/cuối theo từng cảnh, chèn chữ (nếu bật), xuất 1080×1920.</p>
           <div class="row">
-            <button data-act="stitch" class="${job.final ? '' : 'primary'}" ${busy || !allClips ? 'disabled' : ''}>${job.final ? 'Ghép lại' : 'Ghép video'}</button>
+            <button data-act="stitch" class="${job.final && !isStitching ? '' : 'primary'}" ${busy || !allClips ? 'disabled' : ''}>${isStitching ? `⏳ ${esc(job.busy)}` : (job.final ? '🔄 Ghép lại video' : '🎬 Ghép video')}</button>
             <label style="font-weight:400;display:flex;gap:6px;align-items:center"><input type="checkbox" id="wm" checked style="width:auto"> Xoá watermark Veo</label>
             <label style="font-weight:400;display:flex;gap:6px;align-items:center"><input type="checkbox" id="txt-on" ${job.text?.enabled === true ? 'checked' : ''} style="width:auto"> Chèn chữ</label>
             <select id="txt-style" style="width:auto" ${job.text?.enabled === true ? '' : 'disabled'}>
               ${[['brand', 'Khung gradient tím-xanh'], ['dark', 'Khung nền tối'], ['light', 'Khung nền sáng']].map(([v, l]) => `<option value="${v}" ${(job.text?.style || 'brand') === v ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
           </div>
+          ${!allClips ? `<div class="muted" style="font-size:12.5px;margin-top:6px">⚠️ Cần có đủ video của cả ${job.scenes.length} cảnh trước khi ghép (hiện đang thiếu cảnh ${missingScenes.join(', ')}).</div>` : ''}
           ${job.scenes.some((s) => s.stale) ? `<div class="error-box" style="color:var(--warn)">Có cảnh bị lệch nối — vẫn ghép được nhưng chỗ nối sẽ giật.</div>` : ''}
           <label style="margin-top:16px">Caption Facebook
             <textarea rows="4" data-field="caption" ${busy ? 'disabled' : ''}>${esc(job.caption)}</textarea>
