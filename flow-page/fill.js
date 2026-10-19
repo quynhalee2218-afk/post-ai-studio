@@ -217,10 +217,30 @@ async function fill(p, model) {
   await setPrompt(p.prompt);
 }
 
+// Đóng mọi bảng nổi / backdrop của Angular CDK (bảng cài đặt, bảng tài khoản, menu…) để không che nút "Bắt đầu tạo".
+async function closeAllOverlays() {
+  for (let k = 0; k < 5; k++) {
+    const closeAcc = document.querySelector('button[aria-label="Đóng bảng điều khiển tài khoản"]');
+    if (closeAcc && visible(closeAcc)) {
+      press(closeAcc);
+      await sleep(300);
+      continue;
+    }
+    const bd = document.querySelector('.cdk-overlay-backdrop-showing');
+    if (bd) {
+      bd.click();
+      await sleep(300);
+      continue;
+    }
+    break;
+  }
+}
+
 // Kiểm tra nút "Bắt đầu tạo" hoặc cảnh báo hết tín dụng Google Flow trước khi bấm tạo.
 // Nếu model hiện tại (10–12 tín dụng) báo thiếu tín dụng, tự thử hạ xuống "Veo 3.1 - Lite" (5 tín dụng).
 async function checkReadyToCreate(currentModel) {
-  await sleep(400);
+  await closeAllOverlays();
+  await sleep(300);
   const findStartBtn = () => document.querySelector('button[aria-label="Bắt đầu tạo"], button[aria-label="Create"], button[aria-label="Generate"]');
   const findWarnBtn = () => document.querySelector('button[aria-label="Cảnh báo về việc không đủ tín dụng"], button.prompt-warning-button');
 
@@ -236,7 +256,8 @@ async function checkReadyToCreate(currentModel) {
       const btn = await openSettings();
       await pickModel('Veo 3.1 - Lite');
       if (byText('button[role=radio]', '9:16')) press(btn);
-      await sleep(600);
+      await closeAllOverlays();
+      await sleep(500);
       startBtn = findStartBtn();
       if (startBtn && visible(startBtn) && !startBtn.disabled) {
         return { ok: true, model: 'Veo 3.1 - Lite', downgradedFrom: currentModel };
@@ -257,10 +278,9 @@ async function checkReadyToCreate(currentModel) {
         press(accDiv);
         await sleep(600);
         const ovText = document.querySelector('.cdk-overlay-container')?.innerText || document.body.innerText || '';
-        const m = ovText.match(/(\d+)\s*tín dụng Google Flow/i) || ovText.match(/(\d+)\s*Google Flow credit/i);
-        if (m) creditsLeft = Number(m[1]);
-        document.body.click();
-        await sleep(250);
+        const m = ovText.match(/(\d[\d.,]*)\s*tín dụng Google Flow/i) || ovText.match(/(\d[\d.,]*)\s*Google Flow credit/i);
+        if (m) creditsLeft = Number(m[1].replace(/[.,]/g, ''));
+        await closeAllOverlays();
       }
     } catch {}
 
@@ -273,6 +293,8 @@ async function checkReadyToCreate(currentModel) {
     };
   }
 
+  await closeAllOverlays();
   return { ok: Boolean(startBtn && visible(startBtn)), model: currentModel };
 }
+
 
