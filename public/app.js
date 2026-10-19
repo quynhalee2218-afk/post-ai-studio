@@ -2328,7 +2328,7 @@ $('#btn-skill-upload-open')?.addEventListener('click', () => {
     </p>
     <form id="form-skill-upload" class="grid-form">
       <label class="full">Chọn file tải lên (chọn được nhiều file cùng lúc) *
-        <input type="file" name="files" multiple required accept=".zip,.md,.txt,.json,.csv,.tsv,.yaml,.yml,.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp">
+        <input type="file" name="files" multiple required accept=".zip,.skill,.md,.txt,.json,.csv,.tsv,.yaml,.yml,.pdf,.doc,.docx,.xlsx,.xls,.png,.jpg,.jpeg,.webp">
       </label>
       <label>Đẩy vào Skill nào?
         <select name="targetSkillId">
@@ -2336,11 +2336,11 @@ $('#btn-skill-upload-open')?.addEventListener('click', () => {
           ${skillsList.map((s) => `<option value="${esc(s.id)}">Bổ sung vào: ${esc(s.name)} (${esc(s.id)})</option>`).join('')}
         </select>
       </label>
-      <label>Tên Skill (tuỳ chọn nếu tải lẻ file tài liệu)
-        <input name="name" placeholder="VD: Kịch bản Trà An Nhiên Veo3">
+      <label>Tên Skill (tuỳ chọn — đặt tên hiển thị cho Skill)
+        <input name="name" placeholder="VD: CONTENT FT EVERYDAY">
       </label>
       <label class="full">Mô tả ngắn / Khi nào dùng Skill này (tuỳ chọn)
-        <input name="description" placeholder="VD: Công thức viết kịch bản video AI và hồ sơ sản phẩm...">
+        <input name="description" placeholder="VD: Khi cần làm content đăng bài hàng ngày cho sản phẩm...">
       </label>
       <div class="full actions">
         <button type="submit" class="primary">⬆ Tải lên & Nạp vào kho Skill</button>
