@@ -387,23 +387,23 @@
         <div class="dc-format-cards" id="dc-format-cards">
           <label class="dc-format-card on" data-fmt="text_comment">
             <input type="checkbox" value="text_comment" checked>
-            <div class="dc-fmt-badge">Dạng 1 · Giống Ảnh 1 mẫu</div>
-            <div class="dc-fmt-title">🟪 Text nền (1 câu tiêu đề — thả nội dung ở Comment)</div>
-            <p class="dc-fmt-desc">Bài chính chỉ đăng 1 ảnh nền chữ lớn ghi câu tiêu đề gây tò mò cực mạnh (1080×1080). Toàn bộ nội dung giải thích chia thành <b>3–4 comment</b> thả ngay dưới bài đăng để kéo tương tác & thời gian đọc.</p>
+            <div class="dc-fmt-badge">Dạng 1 · Không dùng ảnh</div>
+            <div class="dc-fmt-title">🟪 Text nền Facebook (1 câu Hook — thả nội dung ở Comment)</div>
+            <p class="dc-fmt-desc">Dạng đăng trạng thái Text nền của Facebook (<b>không dùng ảnh đính kèm</b>): Bài chính chỉ đăng 1 câu tiêu đề gây tò mò; toàn bộ nội dung giải thích chia thành <b>3–4 comment</b> thả ngay dưới bài đăng.</p>
           </label>
 
           <label class="dc-format-card on" data-fmt="text_cards">
             <input type="checkbox" value="text_cards" checked>
-            <div class="dc-fmt-badge">Dạng 2 · Giống Ảnh 2 mẫu</div>
-            <div class="dc-fmt-title">🟧 Text nền + Hình ảnh mô tả từng mục (<code>#01, #02…</code>)</div>
-            <p class="dc-fmt-desc">1 câu tiêu đề thu hút có con số ở đầu (VD: <i>“4 thói quen…”, “3 dấu hiệu…”</i>) kèm bộ ảnh thẻ <b>1080×1350 (4:5)</b> đánh số <code>#01, #02...</code> tương ứng đúng với con số trong tiêu đề.</p>
+            <div class="dc-fmt-badge">Dạng 2 · Chuẩn Skill 1:1</div>
+            <div class="dc-fmt-title">🟧 Tiêu đề + Bộ ảnh mô tả từng mục (<code>01, 02…</code>)</div>
+            <p class="dc-fmt-desc">1 câu tiêu đề thu hút có con số ở đầu (VD: <i>“4 lầm tưởng…”, “3 thói quen…”</i>) kèm bộ ảnh vuông <b>1080×1080 (1:1)</b> tông Kem – Nâu đồng chuẩn Skill, đánh số <code>01, 02...</code> tương ứng đúng với con số trong tiêu đề.</p>
           </label>
 
           <label class="dc-format-card on" data-fmt="content_image">
             <input type="checkbox" value="content_image" checked>
-            <div class="dc-fmt-badge">Dạng 3 · Giống Ảnh 3 mẫu</div>
-            <div class="dc-fmt-title">🟩 Content Text đầy đủ + Ảnh minh họa</div>
-            <p class="dc-fmt-desc">Caption hoàn chỉnh chuẩn phễu (TOFU/MOFU 180–350 chữ, BOFU 120–200 chữ, mở đầu bằng tiêu đề trước nút Xem thêm) kèm ảnh minh họa chuẩn Times New Roman & bao bì sản phẩm tham chiếu.</p>
+            <div class="dc-fmt-badge">Dạng 3 · Chuẩn Skill 1:1</div>
+            <div class="dc-fmt-title">🟩 Content Text đầy đủ + Ảnh minh họa chuẩn Skill</div>
+            <p class="dc-fmt-desc">Caption hoàn chỉnh chuẩn phễu (TOFU/MOFU 180–350 chữ, BOFU 120–200 chữ, mở đầu bằng tiêu đề trước nút Xem thêm) kèm ảnh minh họa <b>1080×1080 (1:1)</b> tông Kem – Nâu đồng & bao bì sản phẩm tách nền.</p>
           </label>
         </div>
 
@@ -452,12 +452,12 @@
       <div class="card">
         <div class="job-head" style="margin-bottom:10px">
           <div class="grow">
-            <h2 style="margin:0">④ ⑤ ⑥ Danh Sách Bài Đăng: Viết Content (15 Quy tắc) · Làm Ảnh Minh Họa (12 Quy tắc) · Lên Lịch Fanpage</h2>
+            <h2 style="margin:0">④ ⑤ ⑥ Danh Sách Bài Đăng: Viết Content (15 Quy tắc) · Làm Ảnh Minh Họa (Chuẩn Skill) · Lên Lịch Fanpage</h2>
             <div id="dc-posts-stats" class="muted" style="font-size:13px">Chưa có bài đăng nào — hãy bấm <b>✨ AI Đề xuất Tiêu đề bài đăng</b> ở trên.</div>
           </div>
           <div class="row" style="margin:0">
             <button type="button" id="btn-daily-batch-write" class="primary">✍️ Viết Content các bài đã chọn</button>
-            <button type="button" id="btn-daily-batch-render" class="viral-btn">🎨 Làm Ảnh các bài đã chọn</button>
+            <button type="button" id="btn-daily-batch-render" class="viral-btn">🎨 Làm Ảnh các bài Dạng 2 & 3</button>
             <button type="button" id="btn-daily-batch-schedule" class="small">📅 Lên lịch Fanpage hàng loạt</button>
           </div>
         </div>
@@ -466,8 +466,8 @@
         <div class="row" style="margin-bottom:12px;justify-content:space-between">
           <div class="chips" id="dc-post-filter-chips">
             <button type="button" data-filter="all" class="on">Tất cả bài</button>
-            <button type="button" data-filter="text_comment">🟪 Dạng 1: Text nền + Comment</button>
-            <button type="button" data-filter="text_cards">🟧 Dạng 2: Text nền + Bộ ảnh #01..</button>
+            <button type="button" data-filter="text_comment">🟪 Dạng 1: Text nền + Comment (Không ảnh)</button>
+            <button type="button" data-filter="text_cards">🟧 Dạng 2: Tiêu đề + Bộ ảnh 01..</button>
             <button type="button" data-filter="content_image">🟩 Dạng 3: Content + Ảnh</button>
             <button type="button" data-filter="TOFU">TOFU</button>
             <button type="button" data-filter="MOFU">MOFU</button>
@@ -475,12 +475,12 @@
           </div>
           <div class="row" style="margin:0;align-items:center">
             <label style="margin:0;font-size:12.5px;display:flex;align-items:center;gap:6px">
-              Tông màu ảnh:
+              Phong cách ảnh Skill:
               <select id="dc-render-theme" style="width:auto;padding:5px 10px;font-size:12.5px">
-                <option value="twilight">🌌 Tím Đêm / Nâu Trầm (Chuẩn mẫu)</option>
-                <option value="crimson">🍷 Đỏ Đô Sức Khỏe</option>
-                <option value="herbal_gold">🌿 Vàng Dược Liệu Cổ Truyền</option>
-                <option value="navy">💠 Xanh Navy Chuyên Gia</option>
+                <option value="ft_editorial">🏛️ Kem – Nâu Đồng Cổ Điển (Chuẩn Skill Bổ Thận FT)</option>
+                <option value="herbal_warm">🌿 Kem Ấm – Vàng Thảo Dược Đông Y</option>
+                <option value="deep_espresso">🤎 Nâu Trầm Sang Trọng – Vàng Đồng</option>
+                <option value="clinical_clean">💠 Trắng Kem – Chuyên Gia Sức Khỏe</option>
               </select>
             </label>
           </div>
