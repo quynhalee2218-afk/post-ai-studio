@@ -374,12 +374,12 @@
         <div id="dc-pillars-grid" class="dc-pillars-grid"></div>
       </div>
 
-      <!-- BƯỚC 3: Lựa chọn Số bài đăng/ngày · 3 Dạng đăng bài · Đề xuất Tiêu đề -->
+      <!-- BƯỚC 3: 3 Dạng đăng bài chuẩn · Mỗi lần chỉ làm 3 bài theo 3 dạng -->
       <div class="card">
         <div class="job-head" style="margin-bottom:10px">
           <div class="grow">
-            <h2 style="margin:0">③ Lựa chọn Số Bài Đăng/Ngày · 3 Dạng Bài & Đề Xuất Tiêu Đề</h2>
-            <div class="muted" style="font-size:13px">Chọn số lượng bài đăng mỗi ngày và các dạng bài muốn kết hợp, sau đó bấm <b>✨ AI Đề xuất Tiêu đề</b>.</div>
+            <h2 style="margin:0">③ Đề Xuất 3 Bài Chuẩn Theo 3 Dạng Đăng Bài (Không làm 6 bài)</h2>
+            <div class="muted" style="font-size:13px">Mỗi lần thực hiện hệ thống chỉ tạo <b>đúng 3 bài tương ứng với 3 dạng chuẩn dưới đây</b> để dễ kiểm duyệt và lựa chọn.</div>
           </div>
         </div>
 
@@ -387,91 +387,72 @@
         <div class="dc-format-cards" id="dc-format-cards">
           <label class="dc-format-card on" data-fmt="text_comment">
             <input type="checkbox" value="text_comment" checked>
-            <div class="dc-fmt-badge">Dạng 1 · Không dùng ảnh</div>
-            <div class="dc-fmt-title">🟪 Text nền Facebook (1 câu Hook — thả nội dung ở Comment)</div>
-            <p class="dc-fmt-desc">Dạng đăng trạng thái Text nền của Facebook (<b>không dùng ảnh đính kèm</b>): Bài chính chỉ đăng 1 câu tiêu đề gây tò mò; toàn bộ nội dung giải thích chia thành <b>3–4 comment</b> thả ngay dưới bài đăng.</p>
+            <div class="dc-fmt-badge">Bài 1 · Dạng 1 (Không ảnh)</div>
+            <div class="dc-fmt-title">🟪 Bài Text nền + Comment</div>
+            <p class="dc-fmt-desc">Đăng bài text kèm chọn màu nền trên Facebook: Bài chính <b>chỉ đúng 1 câu Hook</b> (không viết nội dung đi cùng tiêu đề, không ảnh); toàn bộ nội dung diễn giải câu Hook đặt ở <b>4 Comment</b> bên dưới.</p>
           </label>
 
           <label class="dc-format-card on" data-fmt="text_cards">
             <input type="checkbox" value="text_cards" checked>
-            <div class="dc-fmt-badge">Dạng 2 · Chuẩn Skill 1:1</div>
-            <div class="dc-fmt-title">🟧 Tiêu đề + Bộ ảnh mô tả từng mục (<code>01, 02…</code>)</div>
-            <p class="dc-fmt-desc">1 câu tiêu đề thu hút có con số ở đầu (VD: <i>“4 lầm tưởng…”, “3 thói quen…”</i>) kèm bộ ảnh vuông <b>1080×1080 (1:1)</b> tông Kem – Nâu đồng chuẩn Skill, đánh số <code>01, 02...</code> tương ứng đúng với con số trong tiêu đề.</p>
+            <div class="dc-fmt-badge">Bài 2 · Dạng 2 (Bộ ảnh 1:1)</div>
+            <div class="dc-fmt-title">🟧 Text nền + Bộ ảnh theo tiêu đề</div>
+            <p class="dc-fmt-desc">Phần chữ chỉ gồm <b>1 câu Hook có con số</b> (VD: <i>“5 thứ âm thầm rút cạn sinh lực đàn ông mỗi ngày…”</i>) kèm <b>bộ ảnh vuông 1:1</b> giải thích từng thứ đó (nền kem + chữ Serif nâu đậm lớn + ảnh người Việt 40–65 tuổi).</p>
           </label>
 
           <label class="dc-format-card on" data-fmt="content_image">
             <input type="checkbox" value="content_image" checked>
-            <div class="dc-fmt-badge">Dạng 3 · Chuẩn Skill 1:1</div>
-            <div class="dc-fmt-title">🟩 Content Text đầy đủ + Ảnh minh họa chuẩn Skill</div>
-            <p class="dc-fmt-desc">Caption hoàn chỉnh chuẩn phễu (TOFU/MOFU 180–350 chữ, BOFU 120–200 chữ, mở đầu bằng tiêu đề trước nút Xem thêm) kèm ảnh minh họa <b>1080×1080 (1:1)</b> tông Kem – Nâu đồng & bao bì sản phẩm tách nền.</p>
+            <div class="dc-fmt-badge">Bài 3 · Dạng 3 (1 Ảnh 1:1)</div>
+            <div class="dc-fmt-title">🟩 Content Text + 1 Ảnh minh họa</div>
+            <p class="dc-fmt-desc">Bài viết hoàn chỉnh gồm <b>Hook – Body – CTA</b> (mở đầu bằng tiêu đề trước nút Xem thêm, câu chuyện minh họa / giải thích sâu sắc) và đăng cùng <b>1 ảnh minh họa</b> cho content đó.</p>
           </label>
         </div>
 
         <div class="grid-form" style="margin-top:14px">
-          <label>Số bài đăng / ngày
+          <label>Cơ cấu số bài mỗi lần làm
             <select id="dc-posts-per-day">
-              <option value="1">1 bài / ngày</option>
-              <option value="2">2 bài / ngày (Sáng · Tối)</option>
-              <option value="3" selected>3 bài / ngày (Sáng 08:00 · Trưa 12:30 · Tối 19:30 — Chuẩn TOFU-MOFU-BOFU)</option>
-              <option value="4">4 bài / ngày (08:00 · 12:00 · 17:30 · 20:30)</option>
-              <option value="5">5 bài / ngày</option>
-              <option value="6">6 bài / ngày</option>
+              <option value="3" selected>Đúng 3 bài theo 3 dạng (Bài 1: Text nền + Cmt · Bài 2: Hook + Bộ ảnh · Bài 3: Content + 1 Ảnh)</option>
             </select>
           </label>
-          <label>Số ngày muốn lên lịch
-            <select id="dc-days-count">
-              <option value="1" selected>1 ngày (Hôm nay / Ngày chọn)</option>
-              <option value="2">2 ngày liên tiếp</option>
-              <option value="3">3 ngày liên tiếp</option>
-              <option value="5">5 ngày</option>
-              <option value="7">7 ngày (Cả tuần)</option>
-            </select>
-          </label>
-          <label>Ngày bắt đầu đăng bài
-            <input type="date" id="dc-start-date">
-          </label>
-          <label>Kênh / Sheet lịch Excel tham chiếu (nếu có)
+          <label>Kênh / Giọng văn lịch tham chiếu
             <select id="dc-sheet-select">
-              <option value="">— Tự động phối hợp tất cả tuyến phễu —</option>
-              <option value="FB1-Sức khỏe nam trung niên">FB1 — Sức khỏe nam trung niên</option>
-              <option value="FB2-Đêm yên giấc tròn">FB2 — Đêm yên giấc tròn</option>
-              <option value="FB3-Góc nhìn dược liệu">FB3 — Góc nhìn dược liệu</option>
+              <option value="PHONG ĐỘ" selected>Kênh PHONG ĐỘ (Xưng anh — trực diện, gần gũi nam giới 40–65)</option>
+              <option value="PHỤC HỒI">Kênh PHỤC HỒI (Kể chuyện đời thường, góc nhìn người vợ/gia đình)</option>
             </select>
+          </label>
+          <label>Ngày lịch bài đăng
+            <input type="date" id="dc-start-date">
           </label>
           <label class="full">Ghi chú / Yêu cầu chủ đề cụ thể (tuỳ chọn)
             <div class="row" style="margin:4px 0 0">
-              <input id="dc-custom-instruction" placeholder="VD: Ưu tiên chủ đề tiểu đêm mùa lạnh và đau mỏi thắt lưng cho nam giới 50 tuổi..." style="flex:1">
-              <button type="button" id="btn-daily-propose-titles" class="primary">✨ Bước 2: AI Đề xuất Tiêu đề bài đăng</button>
-              <button type="button" id="btn-daily-add-manual" class="small">＋ Thêm 1 bài thủ công</button>
+              <input id="dc-custom-instruction" placeholder="VD: Ưu tiên chủ đề thói quen buổi tối phá giấc ngủ, 5 thứ rút cạn sinh lực, câu chuyện tài xế..." style="flex:1">
+              <button type="button" id="btn-daily-propose-titles" class="primary">✨ Bước 2: Đề xuất 3 Bài theo 3 Dạng</button>
+              <button type="button" id="btn-daily-reset-samples" class="small" title="Khôi phục 3 bài mẫu chuẩn theo ví dụ">↺ Nạp 3 Bài Mẫu Chuẩn</button>
             </div>
           </label>
         </div>
       </div>
 
-      <!-- BƯỚC 4, 5, 6: Danh sách Tiêu đề đã đề xuất -> Viết Content -> Làm Ảnh Minh Họa -> Lên Lịch Fanpage -->
+      <!-- BƯỚC 4, 5: Danh sách 3 Bài theo 3 Dạng -> Viết Content -> Làm Ảnh Minh Họa -->
       <div class="card">
         <div class="job-head" style="margin-bottom:10px">
           <div class="grow">
-            <h2 style="margin:0">④ ⑤ ⑥ Danh Sách Bài Đăng: Viết Content (15 Quy tắc) · Làm Ảnh Minh Họa (Chuẩn Skill) · Lên Lịch Fanpage</h2>
-            <div id="dc-posts-stats" class="muted" style="font-size:13px">Chưa có bài đăng nào — hãy bấm <b>✨ AI Đề xuất Tiêu đề bài đăng</b> ở trên.</div>
+            <h2 style="margin:0">④ ⑤ Chi Tiết 3 Bài Theo 3 Dạng: Viết Content & Làm Ảnh Minh Họa</h2>
+            <div id="dc-posts-stats" class="muted" style="font-size:13px">Đang hiển thị 3 bài chuẩn theo 3 dạng đăng bài.</div>
           </div>
           <div class="row" style="margin:0">
-            <button type="button" id="btn-daily-batch-write" class="primary">✍️ Viết Content các bài đã chọn</button>
-            <button type="button" id="btn-daily-batch-render" class="viral-btn">🎨 Làm Ảnh các bài Dạng 2 & 3</button>
-            <button type="button" id="btn-daily-batch-schedule" class="small">📅 Lên lịch Fanpage hàng loạt</button>
+            <button type="button" id="btn-daily-batch-write" class="primary">✍️ Viết Content cả 3 bài</button>
+            <button type="button" id="btn-daily-batch-render" class="viral-btn">🎨 Làm Ảnh Dạng 2 & Dạng 3</button>
+            <button type="button" id="btn-daily-batch-schedule" class="small">📅 Lên lịch Fanpage</button>
           </div>
         </div>
 
         <!-- Bộ lọc nhanh danh sách bài -->
         <div class="row" style="margin-bottom:12px;justify-content:space-between">
           <div class="chips" id="dc-post-filter-chips">
-            <button type="button" data-filter="all" class="on">Tất cả bài</button>
-            <button type="button" data-filter="text_comment">🟪 Dạng 1: Text nền + Comment (Không ảnh)</button>
-            <button type="button" data-filter="text_cards">🟧 Dạng 2: Tiêu đề + Bộ ảnh 01..</button>
-            <button type="button" data-filter="content_image">🟩 Dạng 3: Content + Ảnh</button>
-            <button type="button" data-filter="TOFU">TOFU</button>
-            <button type="button" data-filter="MOFU">MOFU</button>
-            <button type="button" data-filter="BOFU">BOFU</button>
+            <button type="button" data-filter="all" class="on">Tất cả (3 bài)</button>
+            <button type="button" data-filter="text_comment">🟪 Dạng 1: Text nền + Comment</button>
+            <button type="button" data-filter="text_cards">🟧 Dạng 2: Text nền + Bộ ảnh</button>
+            <button type="button" data-filter="content_image">🟩 Dạng 3: Content text + 1 Ảnh</button>
           </div>
           <div class="row" style="margin:0;align-items:center">
             <label style="margin:0;font-size:12.5px;display:flex;align-items:center;gap:6px">

@@ -349,6 +349,11 @@ app.post('/api/daily-content/campaigns/:id/propose-titles', wrap(async (req, res
   res.json(await DC.proposeTitles(req.params.id, req.body || {}));
 }));
 
+// Nạp lại 3 bài mẫu chuẩn theo 3 dạng (Dạng 1 Text nền + 4 Comment, Dạng 2 Text nền + Bộ 5 ảnh, Dạng 3 Content + 1 Ảnh)
+app.post('/api/daily-content/campaigns/:id/reset-samples', wrap(async (req, res) => {
+  res.json(await DC.resetCampaignSamplePosts(req.params.id));
+}));
+
 // Bước 3: Viết content theo tiêu đề lựa chọn (tuân thủ 15 quy tắc viết content)
 app.post('/api/daily-content/campaigns/:id/posts/:postId/write', wrap(async (req, res) => {
   res.json(await DC.generatePostContent(req.params.id, req.params.postId, req.body || {}));
