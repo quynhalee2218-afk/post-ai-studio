@@ -3177,6 +3177,12 @@ $('#dc-posts-list')?.addEventListener('click', async (e) => {
 
     // Trước khi thực hiện bất kỳ bước nào, lưu các thay đổi trên form của thẻ đó
     const patch = collectPostCardPatch(cardEl);
+    if (act === 'write') {
+      delete patch.caption;
+      delete patch.comments;
+      delete patch.cards;
+      delete patch.imageHeadline;
+    }
     await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(postId)}`, {
       method: 'PATCH',
       body: patch,
