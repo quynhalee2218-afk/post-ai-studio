@@ -1,23 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Trình tạo Ảnh Minh Họa chuẩn Skill `ft-daily-content` (Bổ Thận FT):
-- Gọi trực tiếp công cụ sinh ảnh `image_gen` của Codex (`$ft-daily-content` + `imagegen`) để tạo từng ảnh vuông 1:1 (1080 × 1080) riêng biệt, chân thực (photorealistic documentary photography):
-  + Phần trên (~30%): Nền Kem ấm (#FAF3E8), chính giữa là dòng tiêu đề ngắn gọn bằng font chữ Serif đậm (Times New Roman Bold) màu Nâu đồng đậm (#5B2308), chuyển sắc mượt mà (soft seamless gradient fade) xuống phần ảnh chụp bên dưới.
-  + Phần dưới (~70%): Ảnh chụp đời thực (candid 35mm documentary photo) của người đàn ông Việt Nam 40–65 tuổi đúng bối cảnh/tình huống của từng mục/bài viết.
-  + Không chèn tên page, không đánh số "Ảnh 1/2/3", không watermark, không tự vẽ bao bì sản phẩm giả bằng AI.
-- Khi bài có gắn sản phẩm (`includeProduct = true`):
-  + Ghép ảnh gốc tách nền sạch chỉ gồm hộp đứng và lọ đứng cạnh (`assets/ft-cutout-box-bottle.png`, đã bỏ nền gốc, bàn gốc và hộp kê ngang) vào góc dưới bên phải kèm dòng khuyến cáo bắt buộc ở chân ảnh:
-    "Sản phẩm này không phải là thuốc và không có tác dụng thay thế thuốc chữa bệnh."
+Trình tạo Ảnh Minh Họa chuẩn Hệ Thiết Kế Cao Cấp của Skill `ft-daily-content` (Bổ Thận FT):
+- TUYỆT ĐỐI KHÔNG dùng bố cục cắt ngang "1/3 trên là mảng trắng/kem mờ đục + 2/3 dưới là ảnh chụp bị cắt cụt".
+- Tham chiếu trực tiếp hệ thiết kế mẫu `ft-style-ref-herbs.jpg`, `ft-style-ref-product.jpg` và bao bì gốc tách nền `ft-cutout-box-bottle.png` (chỉ gồm hộp đứng + lọ thủy tinh nắp vàng đứng cạnh, bỏ hộp kê ngang):
+  + Khung vuông 1:1 (1080 × 1080), bố cục toàn cảnh liền mạch, sang trọng, chân thực và có chiều sâu.
+  + Phân cấp chữ Serif (Times New Roman Bold) chuẩn mực:
+    * Nhãn pill nhỏ phía trên nền nâu đồng (#5B2308) viền vàng kim (#C8963E).
+    * Tiêu đề chính cỡ lớn màu nâu đỏ trầm (#5B2308) kết hợp điểm nhấn chữ vàng đồng (#C58B2B) và đường kẻ hoa sen mảnh (─── ❀ ───).
+    * Dòng mô tả ngắn (subtitle) và/hoặc các khung thẻ thông tin viền vàng đồng ngắn gọn, súc tích giúp người xem hiểu ngay ý chính của mục đó.
 """
 import sys
 import os
 import re
-import glob
 import json
 import time
 import shutil
 import base64
-import html
 import tempfile
 import subprocess
 from pathlib import Path
@@ -29,33 +27,6 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
 DISCLAIMER_TEXT = "Sản phẩm này không phải là thuốc và không có tác dụng thay thế thuốc chữa bệnh."
-
-THEMES = {
-    "ft_editorial": {
-        "header_bg": "#FAF3E8",
-        "title_ink": "#5B2308",
-        "sub_ink": "#7A3E1D",
-        "gold": "#C5933A",
-    },
-    "herbal_warm": {
-        "header_bg": "#FBF5E9",
-        "title_ink": "#542209",
-        "sub_ink": "#753B1A",
-        "gold": "#B8862D",
-    },
-    "deep_espresso": {
-        "header_bg": "#F7EFE0",
-        "title_ink": "#4A1B06",
-        "sub_ink": "#6B3215",
-        "gold": "#C8963E",
-    },
-    "clinical_clean": {
-        "header_bg": "#FCF7EE",
-        "title_ink": "#5C260E",
-        "sub_ink": "#7A4022",
-        "gold": "#B88938",
-    },
-}
 
 PROPER_NOUNS = [
     ("bổ thận ft", "Bổ Thận FT"),
@@ -79,12 +50,6 @@ PROPER_NOUNS = [
 
 
 def normalize_short_heading(raw_text: str, max_words: int = 8) -> str:
-    """
-    Chuẩn hóa tiêu đề in trên nền kem của ảnh:
-    - Bỏ số thứ tự đầu dòng (01, #01, 1., ...)
-    - Viết hoa chữ cái đầu tự nhiên + giữ nguyên viết hoa tên riêng (Đông y, Tây y, Bổ Thận FT, Sâm Ngọc Linh)
-    - Giữ ngắn gọn, súc tích (3–8 chữ).
-    """
     s = str(raw_text or "").strip()
     s = re.sub(r"^(?:#?\d+[\.\:\-\)\s]+)+", "", s).strip()
     s = re.sub(r"^[\•\-\–\—\✗\✓\✘\✔]+\s*", "", s).strip()
@@ -131,120 +96,194 @@ def find_codex_bin() -> str:
     return ""
 
 
-def build_scene_subject_description(item: dict, heading_text: str) -> str:
-    """
-    Xây dựng mô tả bối cảnh chụp ảnh chân thực (candid documentary photography) của người đàn ông Việt Nam 45–60 tuổi
-    bám sát nội dung riêng của từng mục/bài viết theo đúng chuẩn skill `ft-daily-content`.
-    """
+def is_product_or_formula_item(item: dict, heading_text: str) -> bool:
+    if item.get("includeProduct"):
+        return True
+    pillar_id = str(item.get("pillarId") or "").upper()
+    if pillar_id == "P4":
+        return True
+    blob = " ".join([
+        heading_text,
+        str(item.get("cardTitle") or ""),
+        str(item.get("postTitle") or ""),
+        str(item.get("imageSpec") or ""),
+        str(item.get("pillar") or ""),
+    ]).lower()
+    product_keywords = [
+        "bổ thận ft",
+        "11 dược liệu",
+        "bảng thành phần",
+        "6–4–1",
+        "6-4-1",
+        "6 + 4 + 1",
+        "sâm ngọc linh",
+        "lục vị",
+        "hàm lượng",
+        "vai trò từng nhóm",
+        "công thức",
+    ]
+    return any(k in blob for k in product_keywords)
+
+
+def build_rich_editorial_spec(item: dict, heading_text: str, is_single_story: bool) -> dict:
     scene_hint = str(item.get("sceneHint") or "").strip()
     image_spec = str(item.get("imageSpec") or "").strip()
     post_title = str(item.get("postTitle") or "").strip()
-    scene_key = str(item.get("sceneKey") or "").lower().strip()
-    blob = " ".join([heading_text, scene_hint, image_spec, post_title, scene_key]).lower()
+    blob = " ".join([heading_text, scene_hint, image_spec, post_title]).lower()
 
-    # Gợi ý chi tiết bối cảnh đời thực Việt Nam theo ngữ cảnh
-    if any(k in blob for k in ["rượu", "bia", "nhậu", "tiệc", "alcohol", "beer"]):
-        context_en = (
-            "A realistic 50-year-old Vietnamese man in a casual short-sleeve button-down shirt sitting at a modest Vietnamese dining table in the evening, "
-            "looking thoughtfully at a glass of beer on the table with a calm, reflective expression, warm indoor dining lighting."
-        )
-    elif any(k in blob for k in ["hút thuốc", "thuốc lá", "khói thuốc", "smoking", "ban công"]):
-        context_en = (
-            "A realistic 50-year-old Vietnamese man in casual home shirt sitting on a quiet apartment balcony in late afternoon, "
-            "a small cup of Vietnamese coffee and an ashtray on the small table beside him, looking pensive and reflective."
-        )
-    elif any(k in blob for k in ["tài xế", "lái xe", "cuốn sổ", "chuyến xe", "driver", "notebook"]):
-        context_en = (
-            "A realistic 49-year-old Vietnamese man in a simple polo shirt sitting at a small wooden table at night under a warm desk lamp, "
-            "looking thoughtfully at an open small handwritten notebook and a pen, calm and reflective mood."
-        )
-    elif any(k in blob for k in ["tiểu đêm", "dậy đêm", "thức giấc", "mất ngủ", "thiếu ngủ", "chập chờn", "insomnia", "sleep"]):
-        context_en = (
-            "A realistic 52-year-old Vietnamese man wearing a modest cotton T-shirt and plaid pajama pants sitting thoughtfully on the edge of his wooden bed at night, "
-            "warm bedside table lamp glowing softly beside him in a cozy Vietnamese bedroom, contemplative expression, no bathroom and no medical equipment."
-        )
-    elif any(k in blob for k in ["dược sĩ", "nhà thuốc", "vai trò từng nhóm", "trao đổi", "tư vấn"]):
-        context_en = (
-            "A realistic 52-year-old Vietnamese man in a neat polo shirt having a calm, trustworthy conversation with a middle-aged Vietnamese pharmacist "
-            "across a clean wooden consultation table in a warm traditional-modern Vietnamese health room, natural indoor lighting."
-        )
-    elif any(k in blob for k in ["11 dược liệu", "đủ tên", "thảo dược", "lục vị", "sâm ngọc linh", "herbal"]):
-        context_en = (
-            "A realistic 52-year-old Vietnamese man wearing reading glasses sitting at a warm wooden table at home, "
-            "attentively reading a clean printed health information sheet held in his hands, with a porcelain cup of warm herbal tea and a small wooden tray of dried traditional herbs on the table."
-        )
-    elif any(k in blob for k in ["hàm lượng", "bảng thành phần", "đọc kỹ", "thông tin", "cửa sổ"]):
-        context_en = (
-            "A realistic 50-year-old Vietnamese man wearing reading glasses sitting near a sunlit wooden window in a Vietnamese living room in the morning, "
-            "calmly examining a printed health guide sheet in his hands with a thoughtful, careful expression."
-        )
-    elif any(k in blob for k in ["6–4–1", "6-4-1", "cấu trúc nhóm", "đánh dấu", "ghi chép"]):
-        context_en = (
-            "A realistic 50-year-old Vietnamese man wearing reading glasses sitting at a warm wooden desk at home, "
-            "holding a pen and calmly reviewing notes in an open notebook with a porcelain teacup beside him, warm natural lighting."
-        )
-    elif any(k in blob for k in ["ngồi quá lâu", "ít vận động", "cổ vai gáy", "mỏi lưng", "văn phòng", "sedentary"]):
-        context_en = (
-            "A realistic 48-year-old Vietnamese man in an office shirt sitting at a wooden desk in front of a laptop, "
-            "gently resting one hand on the back of his neck with a mildly tired, thoughtful expression, natural warm indoor lighting."
-        )
-    elif any(k in blob for k in ["căng thẳng", "áp lực", "stress", "lo âu", "công việc"]):
-        context_en = (
-            "A realistic 48-year-old Vietnamese man in a button-down shirt sitting at a wooden desk in the evening with a laptop and notebook, "
-            "resting his hand thoughtfully on his forehead, warm desk lamp lighting."
-        )
-    elif any(k in blob for k in ["vợ chồng", "người vợ", "bạn đời", "gia đình", "couple"]):
-        context_en = (
-            "A realistic middle-aged Vietnamese couple (man around 52 and wife around 48) sitting together warmly in a cozy Vietnamese living room with two cups of warm tea, "
-            "sharing a gentle, understanding conversation, natural warm home lighting."
-        )
-    else:
-        context_en = (
-            "A realistic 50-year-old Vietnamese man in comfortable everyday smart-casual home attire in an authentic warm Vietnamese living room or study, "
-            "natural posture and thoughtful, calm expression."
-        )
+    if any(k in blob for k in ["11 dược liệu", "đủ tên"]):
+        return {
+            "mode": "product_herbs_infographic",
+            "exact_asset_name": "ft-style-ref-herbs.jpg",
+            "pill_badge": "BỔ THẬN FT",
+            "main_title": "11 DƯỢC LIỆU TRONG BỔ THẬN FT",
+            "gold_highlight": "Phối hợp theo cấu trúc 6 + 4 + 1",
+            "subtitle": "Kiểm tra đủ tên 11 vị thảo dược công bố rõ trên nhãn sản phẩm",
+            "scene_desc": "",
+        }
 
-    vn_detail = scene_hint or image_spec or post_title
-    if vn_detail:
-        return f"{context_en} Specific scene context: {vn_detail}."
-    return context_en
+    if any(k in blob for k in ["6–4–1", "6-4-1", "6 + 4 + 1", "cấu trúc nhóm"]):
+        return {
+            "mode": "product_editorial",
+            "exact_asset_name": "ft-style-ref-641.jpg",
+            "pill_badge": "CÔNG THỨC BỔ THẬN FT",
+            "main_title": "CẤU TRÚC NHÓM 6 + 4 + 1",
+            "gold_highlight": "6 NỀN TẢNG • 4 PHỐI HỢP • 1 BỔ SUNG",
+            "subtitle": "Sự kết hợp có trật tự giữa 11 vị dược liệu trong mỗi viên",
+            "scene_desc": "",
+        }
+
+    if any(k in blob for k in ["hàm lượng", "định lượng"]):
+        return {
+            "mode": "product_editorial",
+            "exact_asset_name": "ft-style-ref-hamluong.jpg",
+            "pill_badge": "BẢNG THÀNH PHẦN BỔ THẬN FT",
+            "main_title": "HÀM LƯỢNG TỪNG THÀNH PHẦN",
+            "gold_highlight": "350MG CAO KHÔ • TỶ LỆ 1:10",
+            "subtitle": "Minh bạch khối lượng từng vị dược liệu trong mỗi viên nang",
+            "scene_desc": (
+                "Warm sunlit cream-gold luxury editorial poster matching the attached reference image (ft-style-ref-product.jpg). "
+                "Background has warm golden-cream studio lighting with dappled leaf shadows and subtle golden mountain & ginseng botanical line art. "
+                "In the lower center foreground on a warm sunlit stone/wood surface stands the EXACT Bổ Thận FT standing box (left) and amber glass bottle with gold cap (right) from the attached reference image (preserve exact packaging design, GMP logo, and text; no horizontal base box). "
+                "Above the product, display 3 elegant cream-and-gold bordered plaques with circular herb illustrations and clear Vietnamese serif labels: "
+                "Plaque 1: '6 vị nền tảng: 420mg – 600mg/vị' | "
+                "Plaque 2: '4 vị phối hợp: 560mg/vị' | "
+                "Plaque 3: 'Sâm Ngọc Linh: 20mg/viên', beside small ceramic bowls of real dried herbs and ginseng root. "
+                f"At the very bottom, include the clean disclaimer line: '{DISCLAIMER_TEXT}'"
+            ),
+        }
+
+    if any(k in blob for k in ["vai trò từng nhóm", "vai trò"]):
+        return {
+            "mode": "product_editorial",
+            "exact_asset_name": "ft-style-ref-vaitro.jpg",
+            "pill_badge": "HIỂU RÕ BỔ THẬN FT",
+            "main_title": "VAI TRÒ TỪNG NHÓM VỊ",
+            "gold_highlight": "BỒI BỔ • TRÁNG DƯƠNG • TĂNG SINH LỰC",
+            "subtitle": "Hiểu rõ sự phối hợp giữa 3 nhóm dược liệu trước khi lựa chọn",
+            "scene_desc": (
+                "Warm sunlit cream-gold luxury editorial poster matching the attached reference image (ft-style-ref-product.jpg). "
+                "Warm sunlit stone/wooden podium with dappled leaf shadows and subtle golden mountain & ginseng line art in the background. "
+                "In the foreground stands the EXACT Bổ Thận FT standing box (left) and amber glass bottle with gold cap (right) from the attached reference image, flanked by 3 refined gold-framed callout badges: "
+                "Badge 1: 'Nhóm 6 vị Lục Vị: Nền tảng bồi bổ' | "
+                "Badge 2: 'Nhóm 4 vị phối hợp: Hỗ trợ bổ thận, tráng dương' | "
+                "Badge 3: 'Sâm Ngọc Linh: Giúp tăng cường sinh lực', with ceramic bowls of dried herbs and ginseng roots on the tabletop. "
+                f"At the bottom, include the clean disclaimer line: '{DISCLAIMER_TEXT}'"
+            ),
+        }
+
+    if is_product_or_formula_item(item, heading_text):
+        return {
+            "mode": "product_editorial",
+            "pill_badge": "BỔ THẬN FT",
+            "main_title": heading_text.upper(),
+            "gold_highlight": "CÔNG THỨC 11 DƯỢC LIỆU • 6 + 4 + 1",
+            "subtitle": "Hỗ trợ bổ thận, tráng dương • Giúp tăng cường sinh lực",
+            "scene_desc": (
+                "Warm sunlit cream-gold luxury editorial poster matching the attached reference image (ft-style-ref-product.jpg). "
+                "On a sunlit stone/wooden surface with dappled leaf shadows and subtle golden mountain & ginseng botanical line art in the background, "
+                "place the EXACT Bổ Thận FT standing box (left) and amber glass bottle with gold cap (right) from the attached reference image (preserve exact packaging text and GMP logo, no horizontal base box), accompanied by ceramic bowls of traditional herbs and fresh ginseng roots. "
+                f"At the bottom, include the clean disclaimer line: '{DISCLAIMER_TEXT}'"
+            ),
+        }
+
+    if any(k in blob for k in ["tiểu đêm", "dậy đêm", "thức giấc", "mất ngủ", "thiếu ngủ", "chập chờn"]):
+        return {
+            "mode": "lifestyle_editorial",
+            "exact_asset_name": "ft-style-ref-tieudem.jpg" if "hiểu đúng thận và tiểu đêm" in blob else "",
+            "pill_badge": "GÓC NHÌN ĐÔNG Y & SỨC KHỎE",
+            "main_title": heading_text.upper(),
+            "gold_highlight": "KHÔNG TỰ QUY KẾT LÀ THẬN YẾU",
+            "subtitle": "Theo dõi biểu hiện 1–2 tuần • Thăm khám nếu kéo dài",
+            "scene_desc": (
+                "Full-bleed luxury health editorial poster combining the warm cream-gold typography hierarchy of the attached reference image with an authentic, warm-lit documentary scene. "
+                "Do NOT use a flat white or cream fog bar cutting across the image. "
+                "Instead, use a warm sunlit/amber cream-gold upper atmosphere with subtle golden mountain & botanical line art where the bronze pill badge, bold dark-brown Serif title, lotus divider '─── ❀ ───', metallic gold highlight, and subtitle are cleanly composed. "
+                "In the lower 62% of the frame, a realistic 52-year-old Vietnamese man in a neat polo shirt sits calmly at a warm wooden table with a porcelain cup of warm herbal tea and a small notebook, flanked by 2 refined gold-bordered takeaway plaques at the bottom: "
+                "'Hạn chế nước muộn & rượu bia tối' and 'Khám chuyên khoa nếu kéo dài'."
+            ),
+        }
+
+    return {
+        "mode": "lifestyle_editorial",
+        "pill_badge": "CHĂM SÓC PHONG ĐỘ TUỔI TRUNG NIÊN",
+        "main_title": heading_text.upper(),
+        "gold_highlight": "CHỦ ĐỘNG LẮNG NGHE CƠ THỂ",
+        "subtitle": scene_hint[:75] if scene_hint else "Duy trì lối sống điều độ và thăm khám sức khỏe định kỳ",
+        "scene_desc": (
+            "Full-bleed warm luxury editorial health poster matching the typography and warm cream-gold aesthetic of the attached reference image (NO flat white fog bar cutting across the photo). "
+            "Upper area integrates the bronze pill badge, large bold dark-brown Times New Roman Serif headline, lotus gold divider '─── ❀ ───', metallic gold highlight phrase, and subtitle over a warm sunlit cream-gold backdrop with subtle golden botanical line art. "
+            f"Lower area shows a realistic, authentic 50-year-old Vietnamese man in everyday smart-casual attire in a warm Vietnamese home setting ({scene_hint or post_title or heading_text}), natural warm lighting, refined and trustworthy."
+        ),
+    }
 
 
-def build_ft_imagegen_prompt(item: dict, is_single_story: bool = False) -> str:
+def build_ft_imagegen_prompt(item: dict, is_single_story: bool = False) -> tuple[str, list[str], str]:
     """
-    Tạo prompt chuẩn cho công cụ `tools.image_gen__imagegen` theo đúng quy tắc của skill `ft-daily-content` và `imagegen`.
+    Trả về `(prompt, ref_image_paths, exact_asset_path)`.
+    Chỉ đính kèm tối đa 1 ảnh tham chiếu gọn nhẹ (`ft-style-ref-product.jpg`, 424KB) để `gpt-image-2` xử lý nhanh trong ~45–60s.
     """
     raw_heading = (
         item.get("cardTitle")
         if not is_single_story
         else (item.get("imageHeadline") or item.get("cardTitle") or item.get("postTitle") or "")
     )
-    max_w = 9 if is_single_story else 7
+    max_w = 8 if is_single_story else 6
     heading_text = normalize_short_heading(raw_heading, max_words=max_w)
-    subject_desc = build_scene_subject_description(item, heading_text)
+    spec = build_rich_editorial_spec(item, heading_text, is_single_story)
 
-    include_product_note = ""
-    if item.get("includeProduct"):
-        include_product_note = (
-            " Leave the bottom-right corner of the foreground relatively uncluttered (such as a clean warm wooden table surface or calm dark area) "
-            "so the authentic product cutout can be composited cleanly in post-processing."
-        )
+    assets_dir = Path(__file__).resolve().parent.parent / "data" / "skills" / "ft-daily-content" / "assets"
+    exact_name = spec.get("exact_asset_name") or ""
+    if exact_name:
+        exact_fp = assets_dir / exact_name
+        if exact_fp.is_file():
+            return "", [], str(exact_fp)
 
-    return (
+    ref_prod_fp = assets_dir / "ft-style-ref-product.jpg"
+    if spec.get("mode") == "product_editorial" and ref_prod_fp.is_file():
+        ref_paths = [str(ref_prod_fp)]
+        input_img_line = "Input images: Image 1 shows the exact target typography hierarchy, bronze pill badge, bold dark-brown Serif headline, lotus gold divider, metallic gold highlight text, warm sunlit cream-gold backdrop with subtle mountain/ginseng line art, and the authentic Bổ Thận FT standing box and amber glass bottle.\n"
+    else:
+        ref_paths = []
+        input_img_line = ""
+
+    prompt = (
         "Use case: ads-marketing\n"
-        "Asset type: square 1:1 Vietnamese daily health social-media content image ($ft-daily-content)\n"
-        "Primary request: Create one polished square 1:1 image with a two-part vertical composition following the exact ft-daily-content editorial style.\n"
-        "Scene/backdrop: Top 32% is a flat warm cream field, exact color #FAF3E8. Bottom 68% seamlessly transitions via a soft, natural gradient fade into a realistic documentary photograph.\n"
-        f"Subject: {subject_desc}{include_product_note}\n"
-        "Style/medium: Top is clean editorial serif typography; lower area is authentic, candid 35mm documentary lifestyle photography of a real Vietnamese middle-aged man (45-60 years old) with natural skin texture, realistic pores, and authentic Vietnamese home details.\n"
-        "Composition/framing: Exact 1:1 square. Top cream area has generous whitespace and centered typography. Below, natural photographic scene with a seamless soft blended border at the divide.\n"
-        "Lighting/mood: Natural, calm, reassuring, warm, documentary realism (NOT CGI, NOT plastic skin, NOT glossy studio stock).\n"
-        "Color palette: Warm cream #FAF3E8 and dark bronze-brown #5B2308 for top; warm natural earth and amber tones below.\n"
-        f'Text (verbatim): "{heading_text}"\n'
-        f'Typography: The ONLY visible text anywhere in the image must be the exact Vietnamese phrase "{heading_text}" on the cream top section, centered horizontally and vertically in that section, bold Times New Roman serif, dark bronze-brown #5B2308. Ensure all Vietnamese diacritics/accents are 100% accurate. Do not add any other words, symbols, labels, page numbers, logos, watermarks, or signatures.\n'
-        "Constraints: Clean legible Vietnamese serif typography; natural documentary photo; seamless soft transition between top cream graphic and bottom photograph; do NOT draw any fake product boxes, supplement bottles, or readable text inside the bottom photograph.\n"
-        "Avoid: Incorrect Vietnamese spelling, garbled text, duplicate text, CGI/plastic skin, ancient robes or temple tunics, hospital/clinic setting, fake product packaging, watermarks."
+        "Asset type: square 1:1 Vietnamese premium health & herbal editorial poster ($ft-daily-content)\n"
+        "Primary request: Create one cohesive, full-bleed square 1:1 luxury editorial poster with warm sunlit cream-gold upper typography and a photorealistic scene.\n"
+        f"{input_img_line}"
+        f"Scene/backdrop & Subject: {spec['scene_desc']}\n"
+        "Typography & Hierarchy (in the upper section, integrated seamlessly into the warm sunlit cream-gold backdrop — NEVER use a flat white fog bar that cuts off the photo):\n"
+        f'  1. Top pill badge (dark bronze-brown #5B2308 fill with thin gold border #C8963E): "{spec["pill_badge"]}"\n'
+        f'  2. Main headline (large bold Times New Roman Serif in deep mahogany/bronze-brown #5B2308): "{spec["main_title"]}"\n'
+        "  3. Delicate gold divider line with a small central lotus ornament (─── ❀ ───)\n"
+        f'  4. Highlight line (bold metallic gold serif #C58B2B): "{spec["gold_highlight"]}"\n'
+        f'  5. Subtitle (clean dark-brown serif #5B2308): "{spec["subtitle"]}"\n'
+        "Color palette: Warm sunlit ivory/cream-gold (#FBF4E4 to #EAD2AC), deep mahogany bronze-brown (#5B2308), and rich metallic gold (#C58B2B).\n"
+        "Constraints: Ensure 100% accurate Vietnamese spelling and diacritics. Keep layout balanced, luxurious, authentic, and easy to read. Do NOT use the ugly split layout of a plain white/cream fog block over a cropped photo. Do NOT add page numbers, watermarks, or channel names.\n"
+        "Avoid: Plain white top banner with blurred edge, blank white sheets of paper, CGI plastic skin, ancient Chinese robes, garbled Vietnamese text, altered product packaging."
     )
+    return prompt, ref_paths, ""
 
 
 def find_session_id_for_cwd(sessions_root: Path, target_cwd: str) -> str:
@@ -269,10 +308,6 @@ def find_session_id_for_cwd(sessions_root: Path, target_cwd: str) -> str:
 
 
 def check_rollout_image_completed(sessions_root: Path, session_id: str) -> str:
-    """
-    Kiểm tra file rollout của session xem `image_gen.generation` đã `completed` chưa.
-    Nếu có base64 trong `result`, trả về chuỗi base64 đó.
-    """
     if not session_id or not sessions_root.is_dir():
         return ""
     matches = list(sessions_root.rglob(f"*{session_id}.jsonl"))
@@ -294,21 +329,25 @@ def check_rollout_image_completed(sessions_root: Path, session_id: str) -> str:
     return ""
 
 
-def generate_single_image_via_codex(codex_bin: str, item: dict, is_single_story: bool, timeout_sec: int = 115) -> str:
-    """
-    Gọi `codex.exe exec` để chạy công cụ `tools.image_gen__imagegen` theo đúng chuẩn skill `ft-daily-content`.
-    Trả về đường dẫn file PNG vừa sinh ra, hoặc chuỗi rỗng nếu lỗi.
-    """
-    if not codex_bin or not os.path.isfile(codex_bin):
-        return ""
+def generate_single_image_via_codex(codex_bin: str, item: dict, is_single_story: bool, timeout_sec: int = 185) -> tuple[str, bool]:
+    img_prompt, ref_paths, exact_asset_path = build_ft_imagegen_prompt(item, is_single_story=is_single_story)
 
-    img_prompt = build_ft_imagegen_prompt(item, is_single_story=is_single_story)
+    if exact_asset_path and os.path.isfile(exact_asset_path):
+        tmp_cwd = tempfile.mkdtemp(prefix="ft_codex_exact_")
+        out_tmp = os.path.join(tmp_cwd, "generated.png")
+        shutil.copy2(exact_asset_path, out_tmp)
+        return out_tmp, True
+
+    if not codex_bin or not os.path.isfile(codex_bin):
+        return "", False
+
+    ref_arg_note = f"and num_last_images_to_include: {len(ref_paths)} " if ref_paths else "(do NOT pass num_last_images_to_include) "
     codex_instruction = (
         "CRITICAL INSTRUCTION:\n"
         "- Do NOT read any files or SKILL.md via shell commands.\n"
         "- Do NOT run any PowerShell/shell commands (no Get-Content, no Get-ChildItem, no Copy-Item).\n"
-        "- Do NOT call view_image.\n"
-        "- Immediately call tools.image_gen__imagegen ONCE with the exact prompt below, and as soon as it completes, reply ONLY with the word DONE.\n\n"
+        f"- Immediately call tools.image_gen__imagegen ONCE with yield_time_ms: 180000 {ref_arg_note}"
+        "using the exact prompt below. As soon as it completes, reply ONLY with the word DONE.\n\n"
         f"{img_prompt}"
     )
 
@@ -316,6 +355,7 @@ def generate_single_image_via_codex(codex_bin: str, item: dict, is_single_story:
     gen_root = codex_home / "generated_images"
     sessions_root = codex_home / "sessions"
     tmp_cwd = tempfile.mkdtemp(prefix="ft_codex_img_")
+    has_prod_in_gen = bool(ref_paths)
 
     models_to_try = ["gpt-5.6-terra", "gpt-5.6-sol"]
     for model_name in models_to_try:
@@ -333,8 +373,11 @@ def generate_single_image_via_codex(codex_bin: str, item: dict, is_single_story:
                 model_name,
                 "-c",
                 'model_reasoning_effort="low"',
-                "-",
             ]
+            for rp in ref_paths:
+                cmd.extend(["-i", rp])
+            cmd.append("-")
+
             proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
@@ -370,7 +413,7 @@ def generate_single_image_via_codex(codex_bin: str, item: dict, is_single_story:
                                     proc.kill()
                                 except Exception:
                                     pass
-                                return out_tmp
+                                return out_tmp, has_prod_in_gen
 
                     b64_or_status = check_rollout_image_completed(sessions_root, session_id)
                     if b64_or_status and b64_or_status != "COMPLETED_ON_DISK":
@@ -382,10 +425,9 @@ def generate_single_image_via_codex(codex_bin: str, item: dict, is_single_story:
                                 proc.kill()
                             except Exception:
                                 pass
-                            return out_tmp
+                            return out_tmp, has_prod_in_gen
 
                 if proc.poll() is not None:
-                    # Process đã kết thúc — kiểm tra lần cuối
                     if not session_id:
                         session_id = find_session_id_for_cwd(sessions_root, tmp_cwd)
                     if session_id:
@@ -396,7 +438,7 @@ def generate_single_image_via_codex(codex_bin: str, item: dict, is_single_story:
                                 if p.stat().st_size > 80_000:
                                     out_tmp = os.path.join(tmp_cwd, "generated.png")
                                     shutil.copy2(str(p), out_tmp)
-                                    return out_tmp
+                                    return out_tmp, has_prod_in_gen
                     break
 
                 time.sleep(0.8)
@@ -409,21 +451,13 @@ def generate_single_image_via_codex(codex_bin: str, item: dict, is_single_story:
                 except Exception:
                     pass
 
-    return ""
+    return "", False
 
 
-def apply_product_and_logo_overlays(base_im: Image.Image, item: dict) -> Image.Image:
-    """
-    Nếu bài đăng có yêu cầu gắn sản phẩm (`includeProduct = true`) hoặc có `logoPath`:
-    - Ghép ảnh gốc tách nền sạch `ft-cutout-box-bottle.png` (chỉ gồm hộp đứng + lọ đứng cạnh, không có hộp kê ngang)
-      vào góc phải dưới, giữ nguyên 100% chữ/màu/tỷ lệ bao bì.
-    - Thêm dải khuyến cáo bắt buộc ở chân ảnh:
-      "Sản phẩm này không phải là thuốc và không có tác dụng thay thế thuốc chữa bệnh."
-    """
+def apply_product_and_logo_overlays(base_im: Image.Image, item: dict, skip_product_overlay: bool = False) -> Image.Image:
     im = base_im.convert("RGBA")
     w, h = im.size
 
-    # 1. Ghép logo nếu chiến dịch có cài đặt logo
     logo_path = item.get("logoPath") or ""
     if logo_path and os.path.isfile(logo_path):
         try:
@@ -442,8 +476,7 @@ def apply_product_and_logo_overlays(base_im: Image.Image, item: dict) -> Image.I
         except Exception:
             pass
 
-    # 2. Ghép sản phẩm Bổ Thận FT tách nền sạch + dòng cảnh báo bắt buộc nếu `includeProduct = true`
-    if item.get("includeProduct"):
+    if item.get("includeProduct") and not skip_product_overlay:
         root_cutout = Path(__file__).resolve().parent.parent / "data" / "skills" / "ft-daily-content" / "assets" / "ft-cutout-box-bottle.png"
         prod_file = str(root_cutout) if root_cutout.is_file() else (item.get("productPath") or "")
         if prod_file and os.path.isfile(prod_file):
@@ -457,7 +490,6 @@ def apply_product_and_logo_overlays(base_im: Image.Image, item: dict) -> Image.I
                     px = w - pw - 36
                     py = h - ph - 58
 
-                    # Bóng đổ mềm tự nhiên dưới đáy hộp và lọ
                     shadow = Image.new("RGBA", (pw + 40, ph + 40), (0, 0, 0, 0))
                     alpha = prod_rgba.split()[3]
                     black_silhouette = Image.new("RGBA", (pw, ph), (20, 10, 4, 145))
@@ -468,7 +500,6 @@ def apply_product_and_logo_overlays(base_im: Image.Image, item: dict) -> Image.I
             except Exception as e:
                 print(f"[ft-daily-content] Product composite warning: {e}", file=sys.stderr)
 
-        # Dải chữ cảnh báo bắt buộc ở chân ảnh
         bar_h = 44
         bar = Image.new("RGBA", (w, bar_h), (38, 20, 10, 232))
         im.alpha_composite(bar, dest=(0, h - bar_h))
@@ -497,272 +528,6 @@ def apply_product_and_logo_overlays(base_im: Image.Image, item: dict) -> Image.I
     return im.convert("RGB")
 
 
-# ==============================================================================
-# FALLBACK RENDERER (Khi Codex CLI không khả dụng hoặc mất kết nối mạng)
-# ==============================================================================
-def file_to_data_uri(fp: str) -> str:
-    if not fp or not os.path.exists(fp):
-        return ""
-    ext = Path(fp).suffix.lower()
-    mime = "image/png" if ext == ".png" else "image/jpeg"
-    with open(fp, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("ascii")
-    return f"data:{mime};base64,{b64}"
-
-
-def get_scenes_dir(item: dict) -> str:
-    scenes_dir = item.get("scenesDir") or ""
-    if scenes_dir and os.path.isdir(scenes_dir):
-        return scenes_dir
-    root_guess = Path(__file__).resolve().parent.parent / "data" / "skills" / "ft-daily-content" / "assets" / "scenes"
-    if root_guess.is_dir():
-        return str(root_guess)
-    return ""
-
-
-def pick_scene_photo(item: dict, used_files: set) -> str:
-    scenes_dir = get_scenes_dir(item)
-    if not scenes_dir:
-        return ""
-
-    scene_key = str(item.get("sceneKey") or "").lower().strip()
-    text_blob = " ".join([
-        scene_key,
-        str(item.get("cardTitle") or ""),
-        str(item.get("imageHeadline") or ""),
-        str(item.get("sceneHint") or ""),
-        str(item.get("imageSpec") or ""),
-        str(item.get("postTitle") or ""),
-    ]).lower()
-
-    keyword_rules = [
-        (["rượu", "bia", "nhậu", "cồn", "tiệc", "alcohol", "beer"], "scene-alcohol-beer.jpg"),
-        (["căng thẳng", "áp lực", "stress", "lo âu", "công việc", "giấy tờ", "đầu óc"], "scene-work-stress.jpg"),
-        (["hút thuốc", "thuốc lá", "khói thuốc", "smoking", "cà phê", "ban công"], "scene-smoking-balcony.jpg"),
-        (["ngồi quá lâu", "ngồi lâu", "ít vận động", "cổ vai gáy", "văn phòng", "mỏi lưng", "sedentary"], "scene-sedentary-neck.jpg"),
-        (["tài xế", "lái xe", "cuốn sổ", "ghi lịch", "chuyến xe", "đếm số đêm", "driver", "notebook"], "scene-driver-notebook.jpg"),
-        (["thiếu ngủ", "mất ngủ", "thức khuya", "ngủ muộn", "tiểu đêm", "dậy đêm", "trằn trọc", "insomnia", "sleep"], "scene-insomnia-bed.jpg"),
-        (["dược liệu", "thảo dược", "sâm ngọc linh", "lục vị", "11 dược liệu", "herbal"], "scene-herbal-essence.jpg"),
-        (["hàm lượng", "buổi sáng", "cửa sổ", "morning"], "scene-morning-vitality.jpg"),
-        (["vai trò", "dược sĩ", "tìm hiểu", "kiến thức", "consult"], "scene-consult-knowledge.jpg"),
-        (["vợ chồng", "người vợ", "bạn đời", "couple"], "scene-couple-harmony.jpg"),
-    ]
-
-    for keywords, filename in keyword_rules:
-        if any(k in text_blob for k in keywords):
-            cand = os.path.join(scenes_dir, filename)
-            if os.path.exists(cand) and cand not in used_files:
-                used_files.add(cand)
-                return file_to_data_uri(cand)
-
-    fallback_order = [
-        "scene-insomnia-bed.jpg",
-        "scene-work-stress.jpg",
-        "scene-alcohol-beer.jpg",
-        "scene-smoking-balcony.jpg",
-        "scene-sedentary-neck.jpg",
-        "scene-driver-notebook.jpg",
-    ]
-    for fn in fallback_order:
-        cand = os.path.join(scenes_dir, fn)
-        if os.path.exists(cand) and cand not in used_files:
-            used_files.add(cand)
-            return file_to_data_uri(cand)
-
-    existing = [os.path.join(scenes_dir, fn) for fn in fallback_order if os.path.exists(os.path.join(scenes_dir, fn))]
-    if existing:
-        idx = int(item.get("index") or 1)
-        return file_to_data_uri(existing[(idx - 1) % len(existing)])
-    return ""
-
-
-def build_clean_editorial_card_html(item: dict, scene_uri: str, is_single_story: bool = False) -> str:
-    w = int(item.get("width") or 1080)
-    h = int(item.get("height") or 1080)
-    theme_key = item.get("theme") if item.get("theme") in THEMES else "ft_editorial"
-    pal = THEMES[theme_key]
-
-    raw_heading = (
-        item.get("cardTitle")
-        if not is_single_story
-        else (item.get("imageHeadline") or item.get("cardTitle") or item.get("postTitle") or "")
-    )
-    max_w = 9 if is_single_story else 7
-    heading_text = normalize_short_heading(raw_heading, max_words=max_w)
-    escaped_heading = html.escape(heading_text)
-
-    char_len = len(heading_text)
-    if char_len <= 18:
-        font_size = 92
-    elif char_len <= 24:
-        font_size = 82
-    elif char_len <= 32:
-        font_size = 72
-    else:
-        font_size = 62
-
-    return f"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    width: {w}px;
-    height: {h}px;
-    overflow: hidden;
-    background: {pal['header_bg']};
-    font-family: 'Times New Roman', Georgia, serif;
-    position: relative;
-  }}
-  .photo-stage {{
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: {int(h * 0.78)}px;
-    overflow: hidden;
-    background: #2B180E;
-  }}
-  .photo-stage img.scene-img {{
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center 22%;
-    display: block;
-  }}
-  .top-cream-blend {{
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: {int(h * 0.38)}px;
-    background: linear-gradient(
-      180deg,
-      {pal['header_bg']} 0%,
-      {pal['header_bg']} 64%,
-      rgba(250, 243, 232, 0.88) 78%,
-      rgba(250, 243, 232, 0.42) 90%,
-      rgba(250, 243, 232, 0.0) 100%
-    );
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 86px 48px 0 48px;
-    text-align: center;
-    z-index: 5;
-  }}
-  .banner-title {{
-    font-family: 'Times New Roman', Georgia, serif;
-    font-size: {font_size}px;
-    font-weight: 700;
-    color: {pal['title_ink']};
-    line-height: 1.12;
-    letter-spacing: -0.8px;
-    transform: scaleX(0.93);
-    text-rendering: geometricPrecision;
-  }}
-</style>
-</head>
-<body>
-  <div class="photo-stage">
-    {f'<img class="scene-img" src="{scene_uri}" alt="Minh họa" />' if scene_uri else ''}
-  </div>
-  <div class="top-cream-blend">
-    <div class="banner-title">{escaped_heading}</div>
-  </div>
-</body>
-</html>"""
-
-
-def render_fallback_with_playwright(fallback_items: list):
-    if not fallback_items:
-        return
-    render_jobs = []
-    used_scenes = set()
-    for item in fallback_items:
-        w = int(item.get("width") or 1080)
-        h = int(item.get("height") or 1080)
-        out_path = item.get("out")
-        scene_uri = pick_scene_photo(item, used_scenes)
-        is_single = (item.get("kind") != "card_item")
-        html_doc = build_clean_editorial_card_html(item, scene_uri, is_single_story=is_single)
-        html_file = out_path + ".tmp.html"
-        png_file = out_path + ".tmp.png"
-        with open(html_file, "w", encoding="utf-8") as f:
-            f.write(html_doc)
-        render_jobs.append({
-            "item": item,
-            "htmlFile": os.path.abspath(html_file),
-            "pngFile": os.path.abspath(png_file),
-            "outFile": os.path.abspath(out_path),
-            "width": w,
-            "height": h,
-        })
-
-    repo_root = str(Path(__file__).resolve().parent.parent)
-    jobs_json = json.dumps(
-        [{k: v for k, v in j.items() if k != "item"} for j in render_jobs],
-        ensure_ascii=False,
-    )
-    node_script = """
-import fs from 'node:fs';
-import { pathToFileURL } from 'node:url';
-import { chromium } from 'playwright-core';
-
-const jobs = JSON.parse(process.argv[1]);
-const chromePaths = [
-  process.env.CHROME_BIN,
-  'C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe',
-  'C:\\\\Program Files (x86)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe',
-  'C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe',
-].filter((p) => p && fs.existsSync(p));
-
-const browser = await chromium.launch({
-  executablePath: chromePaths[0],
-  headless: true,
-});
-try {
-  for (const j of jobs) {
-    const page = await browser.newPage({
-      viewport: { width: j.width, height: j.height },
-      deviceScaleFactor: 2,
-    });
-    await page.goto(pathToFileURL(j.htmlFile).href, { waitUntil: 'load', timeout: 30000 });
-    await page.waitForTimeout(120);
-    await page.screenshot({ path: j.pngFile, fullPage: false });
-    await page.close();
-  }
-} finally {
-  await browser.close();
-}
-"""
-    res = subprocess.run(
-        ["node", "--input-type=module", "-e", node_script, jobs_json],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    if res.returncode != 0:
-        raise RuntimeError(f"Playwright fallback render failed: {res.stderr or res.stdout}")
-
-    for j in render_jobs:
-        try:
-            with Image.open(j["pngFile"]) as im:
-                resized = im.convert("RGB").resize((j["width"], j["height"]), Image.Resampling.LANCZOS)
-                final_im = apply_product_and_logo_overlays(resized, j["item"])
-                final_im.save(j["outFile"], "JPEG", quality=95, subsampling=0)
-            print(f"Rendered (fallback): {j['outFile']} ({j['width']}x{j['height']})")
-        finally:
-            for tmp in (j["htmlFile"], j["pngFile"]):
-                try:
-                    if os.path.exists(tmp):
-                        os.remove(tmp)
-                except OSError:
-                    pass
-
-
 def process_all_items(items: list):
     valid_items = [
         it for it in items
@@ -775,50 +540,39 @@ def process_all_items(items: list):
         os.makedirs(os.path.dirname(os.path.abspath(it["out"])), exist_ok=True)
 
     codex_bin = find_codex_bin()
-    fallback_items = []
+    if not codex_bin:
+        raise RuntimeError("Không tìm thấy Codex CLI (codex.exe) để tạo ảnh chuẩn skill ft-daily-content.")
 
-    if codex_bin:
-        max_workers = min(4, len(valid_items))
-        futures = {}
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            for it in valid_items:
-                is_single = (it.get("kind") != "card_item")
-                fut = pool.submit(generate_single_image_via_codex, codex_bin, it, is_single)
-                futures[fut] = it
+    # Chạy tuần tự (max_workers = 1) để tránh xung đột hàng đợi image_gen có ảnh tham chiếu của OpenAI
+    max_workers = 1
+    futures = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        for it in valid_items:
+            is_single = (it.get("kind") != "card_item")
+            fut = pool.submit(generate_single_image_via_codex, codex_bin, it, is_single)
+            futures[fut] = it
 
-            for fut in as_completed(futures):
-                it = futures[fut]
-                w = int(it.get("width") or 1080)
-                h = int(it.get("height") or 1080)
-                out_path = os.path.abspath(it["out"])
-                gen_png = ""
+        for fut in as_completed(futures):
+            it = futures[fut]
+            w = int(it.get("width") or 1080)
+            h = int(it.get("height") or 1080)
+            out_path = os.path.abspath(it["out"])
+            gen_png, already_has_prod = fut.result()
+
+            if gen_png and os.path.isfile(gen_png):
                 try:
-                    gen_png = fut.result()
-                except Exception as e:
-                    print(f"[ft-daily-content] Worker error: {e}", file=sys.stderr)
-
-                if gen_png and os.path.isfile(gen_png):
+                    with Image.open(gen_png) as im:
+                        resized = im.convert("RGB").resize((w, h), Image.Resampling.LANCZOS)
+                        final_im = apply_product_and_logo_overlays(resized, it, skip_product_overlay=already_has_prod)
+                        final_im.save(out_path, "JPEG", quality=95, subsampling=0)
+                    print(f"Rendered (ft-daily-content luxury style): {out_path} ({w}x{h})")
+                finally:
                     try:
-                        with Image.open(gen_png) as im:
-                            resized = im.convert("RGB").resize((w, h), Image.Resampling.LANCZOS)
-                            final_im = apply_product_and_logo_overlays(resized, it)
-                            final_im.save(out_path, "JPEG", quality=95, subsampling=0)
-                        print(f"Rendered (ft-daily-content image_gen): {out_path} ({w}x{h})")
-                    except Exception as e:
-                        print(f"[ft-daily-content] Save error: {e}", file=sys.stderr)
-                        fallback_items.append(it)
-                    finally:
-                        try:
-                            shutil.rmtree(os.path.dirname(gen_png), ignore_errors=True)
-                        except Exception:
-                            pass
-                else:
-                    fallback_items.append(it)
-    else:
-        fallback_items = valid_items
-
-    if fallback_items:
-        render_fallback_with_playwright(fallback_items)
+                        shutil.rmtree(os.path.dirname(gen_png), ignore_errors=True)
+                    except Exception:
+                        pass
+            else:
+                raise RuntimeError(f"Không tạo được ảnh cho mục: {it.get('cardTitle') or it.get('imageHeadline')}")
 
 
 def main():
