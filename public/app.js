@@ -3218,7 +3218,7 @@ $('#dc-posts-list')?.addEventListener('click', async (e) => {
       const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(postId)}/render-images`, {
         method: 'POST',
         body: { theme },
-        timeoutMs: 120000,
+        timeoutMs: 300000,
       });
       currentCampaign = r.campaign;
       renderDailyPostsList();
@@ -3314,7 +3314,7 @@ $('#btn-daily-batch-render')?.addEventListener('click', async (e) => {
       const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(p.id)}/render-images`, {
         method: 'POST',
         body: { theme },
-        timeoutMs: 120000,
+        timeoutMs: 300000,
       });
       currentCampaign = r.campaign;
       renderDailyPostsList();
