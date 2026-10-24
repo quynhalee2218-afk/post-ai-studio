@@ -37,7 +37,8 @@ function show(view) {
     const el = $(`#view-${v}`);
     if (el) el.hidden = v !== view;
   }
-  $('#tab-daily')?.classList.toggle('active', view === 'daily');
+  $('#tab-daily')?.classList.toggle('active', view === 'daily' && dailyWorkspaceMode === 'active');
+  $('#tab-daily-history')?.classList.toggle('active', view === 'daily' && dailyWorkspaceMode === 'history');
   $('#tab-skills')?.classList.toggle('active', view === 'skills');
   $('#tab-posts').classList.toggle('active', view === 'posts');
   $('#tab-accounts').classList.toggle('active', view === 'accounts');
@@ -2604,6 +2605,33 @@ let dailyCampaigns = [];
 let currentCampaign = null;
 let selectedPillarIds = [];
 let dailyPostFilter = 'all';
+let dailyWorkspaceMode = 'active'; // 'active' | 'history'
+let dailyHistoryFilter = 'all';
+let dailyHistorySearch = '';
+
+function setDailyWorkspaceMode(mode = 'active') {
+  dailyWorkspaceMode = mode === 'history' ? 'history' : 'active';
+  const activeWs = $('#daily-active-workspace');
+  const historyWs = $('#daily-history-workspace');
+  if (activeWs) activeWs.hidden = dailyWorkspaceMode !== 'active';
+  if (historyWs) historyWs.hidden = dailyWorkspaceMode !== 'history';
+
+  const btnAct = $('#btn-dc-ws-active');
+  const btnHist = $('#btn-dc-ws-history');
+  if (btnAct) {
+    btnAct.classList.toggle('primary', dailyWorkspaceMode === 'active');
+    btnAct.classList.toggle('small', dailyWorkspaceMode !== 'active');
+  }
+  if (btnHist) {
+    btnHist.classList.toggle('primary', dailyWorkspaceMode === 'history');
+    btnHist.classList.toggle('small', dailyWorkspaceMode !== 'history');
+  }
+
+  if (document.body.dataset.view === 'daily') {
+    $('#tab-daily')?.classList.toggle('active', dailyWorkspaceMode === 'active');
+    $('#tab-daily-history')?.classList.toggle('active', dailyWorkspaceMode === 'history');
+  }
+}
 
 function getDailyAiModel() {
   return $('#daily-ai-model-select')?.value || cfg.defaultAi?.combined || 'claude';
@@ -2624,7 +2652,7 @@ async function loadDailyCampaigns(selectId = '') {
   const targetId = selectId || currentCampaign?.id || dailyCampaigns[0]?.id || '';
   sel.innerHTML = dailyCampaigns.map((c) => `
     <option value="${esc(c.id)}" ${c.id === targetId ? 'selected' : ''}>
-      📦 ${esc(c.productName || c.name)} (${(c.posts || []).length} bài · ${(c.pillars || []).length} tuyến phễu)
+      📦 ${esc(c.productName || c.name)} (${(c.posts || []).length} bài mới · ${(c.historyPosts || []).length} bài lịch sử · ${(c.pillars || []).length} tuyến phễu)
     </option>`).join('');
   currentCampaign = dailyCampaigns.find((c) => c.id === targetId) || dailyCampaigns[0] || null;
   renderCurrentDailyCampaign();
@@ -2687,6 +2715,8 @@ function renderCurrentDailyCampaign() {
   }
   renderDailyPillars();
   renderDailyPostsList();
+  renderDailyHistoryList();
+  setDailyWorkspaceMode(dailyWorkspaceMode);
 }
 
 function renderDailyPillars() {
@@ -2731,15 +2761,19 @@ function renderDailyPostsList() {
   const statsEl = $('#dc-posts-stats');
   if (!listEl) return;
   const allPosts = currentCampaign?.posts || [];
+  const historyPosts = currentCampaign?.historyPosts || [];
   const selectedCount = allPosts.filter((p) => p.selected !== false).length;
   const contentReadyCount = allPosts.filter((p) => p.caption || (p.comments && p.comments.length)).length;
   const imgReadyCount = allPosts.filter((p) => p.postType !== 'text_comment' && p.images?.length).length;
-  const schedCount = allPosts.filter((p) => ['scheduled', 'published'].includes(p.status)).length;
+
+  if ($('#dc-ws-active-count')) $('#dc-ws-active-count').textContent = `${allPosts.length} bài mới`;
+  if ($('#dc-ws-history-count')) $('#dc-ws-history-count').textContent = `${historyPosts.length} bài đã đăng/lên lịch`;
+  if ($('#nav-daily-history-badge')) $('#nav-daily-history-badge').textContent = String(historyPosts.length);
 
   if (statsEl) {
     statsEl.innerHTML = allPosts.length
-      ? `Đang có <b>${allPosts.length} bài</b> theo 3 dạng chuẩn (Đang chọn: <b>${selectedCount}</b> · Đã có Content: <b>${contentReadyCount}</b> · Đã làm Ảnh Dạng 2 & 3: <b>${imgReadyCount}</b> · Đã lên lịch/đăng: <b>${schedCount}</b>)`
-      : `Chưa có bài đăng nào — hãy bấm <b>✨ Bước 2: Đề xuất 3 Bài theo 3 Dạng</b> ở khung trên.`;
+      ? `Đang chuẩn bị <b>${allPosts.length} bài mới</b> chờ lên lịch (Đang chọn: <b>${selectedCount}</b> · Đã có Content: <b>${contentReadyCount}</b> · Đã làm Ảnh Dạng 2 & 3: <b>${imgReadyCount}</b>) · Những bài đã đăng/lên lịch trên Meta (<b>${historyPosts.length} bài</b>) đã được đẩy sang tab <b>🕘 Lịch sử Content</b>.`
+      : `Tất cả bài đã được đẩy sang phần <b>🕘 Lịch sử Content (${historyPosts.length} bài)</b> — hãy bấm <b>✨ Bước 2: Đề xuất 3 Bài theo 3 Dạng</b> để tạo 3 bài mới chuẩn bị lên lịch!`;
   }
 
   const filtered = allPosts.filter((p) => {
@@ -2930,16 +2964,163 @@ function renderDailyPostsList() {
   }).join('');
 }
 
-function openDailyView() {
+function renderDailyHistoryList() {
+  const listEl = $('#dc-history-list');
+  const statsEl = $('#dc-history-stats');
+  if (!listEl) return;
+  const historyPosts = currentCampaign?.historyPosts || [];
+  if ($('#dc-ws-history-count')) $('#dc-ws-history-count').textContent = `${historyPosts.length} bài đã đăng/lên lịch`;
+  if ($('#nav-daily-history-badge')) $('#nav-daily-history-badge').textContent = String(historyPosts.length);
+
+  const pubCount = historyPosts.filter((p) => p.status === 'published').length;
+  const schedCount = historyPosts.filter((p) => p.status === 'scheduled').length;
+  const c1 = historyPosts.filter((p) => p.postType === 'text_comment').length;
+  const c2 = historyPosts.filter((p) => p.postType === 'text_cards').length;
+  const c3 = historyPosts.filter((p) => p.postType === 'content_image').length;
+
+  if (statsEl) {
+    statsEl.innerHTML = historyPosts.length
+      ? `Tổng cộng <b>${historyPosts.length} bài Content</b> đã đẩy lên Meta Business Suite (🚀 Đã đăng ngay: <b>${pubCount}</b> · 📅 Đã lên lịch: <b>${schedCount}</b> · 🟪 Dạng 1: <b>${c1}</b> · 🟧 Dạng 2: <b>${c2}</b> · 🟩 Dạng 3: <b>${c3}</b>).`
+      : `Chưa có bài Content nào trong lịch sử. Khi bạn bấm <b>📅 Hẹn giờ đăng Fanpage</b> hoặc <b>🚀 Đăng ngay</b> ở phần Content Hàng Ngày, bài viết sẽ tự động chuyển sang đây.`;
+  }
+
+  const q = (dailyHistorySearch || '').trim().toLowerCase();
+  const filtered = historyPosts.filter((p) => {
+    if (dailyHistoryFilter !== 'all' && p.postType !== dailyHistoryFilter) return false;
+    if (q) {
+      const hay = `${p.title || ''} ${p.caption || ''} ${p.date || ''} ${p.pillarName || ''} ${p.fbPostId || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    listEl.innerHTML = `<div class="muted" style="text-align:center;padding:32px;border:1.5px dashed var(--line);border-radius:12px">Không có bài lịch sử nào khớp bộ lọc hiện tại.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = filtered.map((p, idx) => {
+    const isTextComment = p.postType === 'text_comment';
+    const isTextCards = p.postType === 'text_cards';
+    const fmtBadge = isTextComment
+      ? '<span class="badge" style="background:#f3e8ff;color:#6b21a8;border-color:#d8b4fe;font-weight:700">🟪 Dạng 1: Bài Text nền + 4 Comment</span>'
+      : isTextCards
+        ? '<span class="badge" style="background:#ffedd5;color:#9a3412;border-color:#fdba74;font-weight:700">🟧 Dạng 2: Text nền + Bộ ảnh (Skill Meta)</span>'
+        : '<span class="badge" style="background:#dcfce7;color:#166534;border-color:#86efac;font-weight:700">🟩 Dạng 3: Content Text + 1 Ảnh minh họa</span>';
+
+    const stBadge = p.status === 'published'
+      ? '<span class="badge ok">✓ Đã đăng công khai trên Meta</span>'
+      : `<span class="badge scheduled">📅 Đã lên lịch trên Meta (${esc(p.date || '')} · ${esc(p.scheduledTime || '08:00')})</span>`;
+
+    const pushedTimeStr = p.publishedAtIso
+      ? new Date(p.publishedAtIso).toLocaleString('vi-VN')
+      : `${p.date || ''} ${p.scheduledTime || ''}`;
+
+    return `
+      <div class="dc-post-card" data-history-post-id="${esc(p.id)}" style="border-left:4px solid #10b981">
+        <div class="dc-post-head">
+          <div class="row" style="margin:0;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="badge ok" style="font-weight:800">🕘 Lịch sử #${idx + 1}</span>
+            <span class="badge">📅 Lịch bài: <b>${esc(p.date || '—')} · ${esc(p.scheduledTime || '08:00')}</b></span>
+            <span class="dc-funnel-badge ${esc(p.funnel || 'TOFU')}">${esc(p.funnel || 'TOFU')}</span>
+            ${fmtBadge}
+            <span class="badge">${esc(p.pillarName || p.pillarId || 'Tuyến phễu')}</span>
+          </div>
+          <div class="row" style="margin:0;align-items:center;gap:6px;flex-wrap:wrap">
+            ${stBadge}
+            ${p.fbPostId ? `<code style="font-size:11px;padding:2px 6px;background:#f1f5f9;border-radius:6px" title="Mã bài trên Meta Business Suite">ID: ${esc(p.fbPostId)}</code>` : ''}
+            ${p.fbPermalink ? `<a href="${esc(p.fbPermalink)}" target="_blank" rel="noopener" class="badge ok" style="text-decoration:none;font-weight:700">🔗 Mở trên Meta / FB ↗</a>` : ''}
+            <button type="button" class="small" data-dc-hist-act="copy" title="Copy toàn bộ nội dung bài đăng">📋 Copy nội dung</button>
+            <button type="button" class="small danger" data-dc-hist-act="delete" title="Xoá bài này khỏi lịch sử">🗑 Xoá</button>
+          </div>
+        </div>
+
+        <div class="muted" style="font-size:12px;margin-top:6px">
+          ⏱ Thời điểm đẩy lên Meta Business Suite: <b>${esc(pushedTimeStr)}</b>
+        </div>
+
+        <!-- Nội dung chi tiết đã đăng -->
+        <div class="dc-work-grid" style="margin-top:10px;${isTextComment ? 'grid-template-columns: 1fr;' : ''}">
+          <div>
+            ${isTextComment ? `
+              <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);color:#fff;padding:16px 20px;border-radius:12px;text-align:center;font-weight:800;font-size:16px;line-height:1.4;margin-bottom:10px">
+                “${esc(p.title || p.caption || '')}”
+                <div style="font-size:11px;font-weight:500;opacity:0.8;margin-top:5px">↑ Bài Text nền đã đăng/lên lịch trên Meta</div>
+              </div>
+              ${(p.comments || []).length ? `
+                <div>
+                  <b style="font-size:12.5px;color:#5b21b6">💬 4 Comment diễn giải đi kèm bài đăng:</b>
+                  <div class="dc-comments-box" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px">
+                    ${(p.comments || []).map((cmt, ci) => `
+                      <div class="dc-comment-item" style="background:#f8fafc;padding:10px;border-radius:8px;border:1px solid var(--line)">
+                        <span class="dc-comment-num">Comment ${ci + 1}</span>
+                        <div style="font-size:12.5px;line-height:1.5;white-space:pre-wrap;margin-top:4px">${esc(cmt)}</div>
+                      </div>`).join('')}
+                  </div>
+                </div>` : ''}
+            ` : isTextCards ? `
+              <div style="background:#fff7ed;border:1.5px solid #fdba74;color:#7c2d12;padding:12px 16px;border-radius:10px;margin-bottom:10px">
+                <b>🟧 Câu Hook tiêu đề (Đã đăng theo Skill Meta: Đăng Text nền + bộ ảnh):</b><br>
+                <span style="font-size:14.5px;font-weight:800;color:#431407">“${esc(p.title || p.caption || '')}”</span>
+              </div>
+              ${(p.cards || []).length ? `
+                <div>
+                  <b style="font-size:12.5px;color:#c2410c">🗂️ Danh sách ${p.cards.length} thẻ nội dung trong bộ ảnh:</b>
+                  <div style="display:grid;gap:6px;margin-top:6px">
+                    ${p.cards.map((c, ci) => `
+                      <div style="padding:6px 10px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;font-size:13px">
+                        <span class="badge scheduled" style="margin-right:6px">Ảnh ${ci + 1}</span>
+                        <b style="color:#5B240B">${esc(c.cardTitle || '')}</b>
+                      </div>`).join('')}
+                  </div>
+                </div>` : ''}
+            ` : `
+              <div>
+                <b style="font-size:12.5px;color:#065f46">📝 Nội dung bài viết (Hook – Body – CTA):</b>
+                <div style="margin-top:6px;padding:12px 14px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;font-size:13px;line-height:1.58;white-space:pre-wrap;max-height:280px;overflow:auto">${esc(p.caption || p.title || '')}</div>
+              </div>
+            `}
+          </div>
+
+          ${!isTextComment ? `
+            <div>
+              <b style="font-size:12.5px">🎨 Hình ảnh đã đăng kèm bài (${(p.images || []).length} ảnh):</b>
+              ${(p.images || []).length ? `
+                <div class="dc-image-gallery" style="margin-top:6px">
+                  ${p.images.map((im, ii) => `
+                    <div class="dc-img-thumb">
+                      <a href="${esc(im.url)}" target="_blank" rel="noopener">
+                        <img src="${esc(im.url)}" alt="Ảnh ${ii + 1}" loading="lazy">
+                      </a>
+                      <div class="dc-img-meta">
+                        <span>Ảnh #${ii + 1} (${im.width || 1080}×${im.height || 1080})</span>
+                        <a href="${esc(im.url)}" download="${esc(im.file || `post-${ii + 1}.jpg`)}">⬇ Tải</a>
+                      </div>
+                    </div>`).join('')}
+                </div>` : `<div class="muted" style="margin-top:6px;font-size:12.5px">Không có file ảnh lưu kèm.</div>`}
+            </div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openDailyView(mode = 'active') {
   currentId = null;
   stopPoll();
   loadList();
+  dailyWorkspaceMode = mode === 'history' ? 'history' : 'active';
   show('daily');
+  setDailyWorkspaceMode(dailyWorkspaceMode);
   loadDailyCampaigns();
 }
 
-$('#tab-daily')?.addEventListener('click', openDailyView);
-$('#btn-go-daily')?.addEventListener('click', openDailyView);
+$('#tab-daily')?.addEventListener('click', () => openDailyView('active'));
+$('#btn-go-daily')?.addEventListener('click', () => openDailyView('active'));
+$('#tab-daily-history')?.addEventListener('click', () => openDailyView('history'));
+$('#btn-go-daily-history')?.addEventListener('click', () => openDailyView('history'));
+$('#btn-dc-ws-active')?.addEventListener('click', () => setDailyWorkspaceMode('active'));
+$('#btn-dc-ws-history')?.addEventListener('click', () => setDailyWorkspaceMode('history'));
+$('#btn-dc-back-to-active')?.addEventListener('click', () => setDailyWorkspaceMode('active'));
 
 $('#btn-daily-toggle-rules')?.addEventListener('click', () => {
   const box = $('#daily-rules-card');
@@ -3128,6 +3309,55 @@ $('#dc-post-filter-chips')?.addEventListener('click', (e) => {
   renderDailyPostsList();
 });
 
+// Bộ lọc và tìm kiếm trong Lịch sử Content đã đăng
+$('#dc-history-filter-chips')?.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-hfilter]');
+  if (!b) return;
+  dailyHistoryFilter = b.dataset.hfilter;
+  for (const x of document.querySelectorAll('#dc-history-filter-chips button')) {
+    x.classList.toggle('on', x.dataset.hfilter === dailyHistoryFilter);
+  }
+  renderDailyHistoryList();
+});
+
+$('#dc-history-search')?.addEventListener('input', (e) => {
+  dailyHistorySearch = e.target.value || '';
+  renderDailyHistoryList();
+});
+
+$('#dc-history-list')?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-dc-hist-act]');
+  if (!btn || !currentCampaign) return;
+  const cardEl = btn.closest('[data-history-post-id]');
+  if (!cardEl) return;
+  const postId = cardEl.dataset.historyPostId;
+  const act = btn.dataset.dcHistAct;
+  const post = (currentCampaign.historyPosts || []).find((p) => p.id === postId);
+
+  if (act === 'copy' && post) {
+    const parts = [post.caption || post.title || ''];
+    if (Array.isArray(post.comments) && post.comments.length) {
+      parts.push(...post.comments.map((c, idx) => `[Comment ${idx + 1}]\n${c}`));
+    }
+    await navigator.clipboard.writeText(parts.filter(Boolean).join('\n\n---\n\n'));
+    toast('✓ Đã copy toàn bộ nội dung bài đăng trong lịch sử!');
+    return;
+  }
+
+  if (act === 'delete') {
+    if (!confirm('Xoá bài đăng này khỏi lịch sử Content đã đăng?')) return;
+    try {
+      const r = await api(`/api/daily-content/campaigns/${encodeURIComponent(currentCampaign.id)}/posts/${encodeURIComponent(postId)}`, { method: 'DELETE' });
+      currentCampaign = r.campaign;
+      renderDailyPostsList();
+      renderDailyHistoryList();
+      toast('Đã xoá bài đăng khỏi lịch sử');
+    } catch (err) {
+      toast(err.message);
+    }
+  }
+});
+
 function collectPostCardPatch(cardEl) {
   const patch = {};
   for (const inp of cardEl.querySelectorAll('[data-dc-field]')) {
@@ -3241,7 +3471,12 @@ $('#dc-posts-list')?.addEventListener('click', async (e) => {
       });
       currentCampaign = r.campaign;
       renderDailyPostsList();
-      toast(act === 'publish' ? '🚀 Đã đăng bài lên Fanpage thành công!' : act === 'schedule' ? '📅 Đã lên lịch hẹn giờ đăng bài lên Fanpage!' : '📝 Đã lưu nháp trên Fanpage!', 6000);
+      renderDailyHistoryList();
+      toast(act === 'publish'
+        ? '🚀 Đã đăng bài lên Fanpage thành công & tự động đẩy sang phần 🕘 Lịch sử Content!'
+        : act === 'schedule'
+          ? '📅 Đã lên lịch đăng Fanpage thành công & tự động đẩy sang phần 🕘 Lịch sử Content!'
+          : '📝 Đã lưu nháp trên Fanpage!', 6500);
     }
   } catch (err) {
     toast(err.message, 7000);
@@ -3346,8 +3581,9 @@ $('#btn-daily-batch-schedule')?.addEventListener('click', async (e) => {
       });
       currentCampaign = r.campaign;
       renderDailyPostsList();
+      renderDailyHistoryList();
     }
-    toast(`✓ Đã lên lịch đăng Fanpage thành công cho ${selected.length} bài!`, 6000);
+    toast(`✓ Đã lên lịch đăng Fanpage thành công cho ${selected.length} bài & chuyển toàn bộ sang phần 🕘 Lịch sử Content!`, 6500);
   } catch (err) {
     toast(err.message, 7000);
   } finally {
@@ -3377,7 +3613,7 @@ $('#btn-daily-batch-schedule')?.addEventListener('click', async (e) => {
     <span class="pill" id="pill-gem">♊ Gemini…</span>
     <span class="pill" id="pill-flow">Flow…</span>
     <span class="pill" id="pill-fb">Facebook…</span>`;
-  await Promise.all([loadFb(), loadChromeStatus(), loadSkills(false), loadAiAccounts()]);
+  await Promise.all([loadFb(), loadChromeStatus(), loadSkills(false), loadAiAccounts(), loadDailyCampaigns().catch(() => {})]);
   loadClaude(); // không chờ: kiểm tra tài khoản Claude mất vài giây
   durHint();
   await loadList();
