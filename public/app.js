@@ -2618,14 +2618,8 @@ function setDailyWorkspaceMode(mode = 'active') {
 
   const btnAct = $('#btn-dc-ws-active');
   const btnHist = $('#btn-dc-ws-history');
-  if (btnAct) {
-    btnAct.classList.toggle('primary', dailyWorkspaceMode === 'active');
-    btnAct.classList.toggle('small', dailyWorkspaceMode !== 'active');
-  }
-  if (btnHist) {
-    btnHist.classList.toggle('primary', dailyWorkspaceMode === 'history');
-    btnHist.classList.toggle('small', dailyWorkspaceMode !== 'history');
-  }
+  if (btnAct) btnAct.classList.toggle('active', dailyWorkspaceMode === 'active');
+  if (btnHist) btnHist.classList.toggle('active', dailyWorkspaceMode === 'history');
 
   if (document.body.dataset.view === 'daily') {
     $('#tab-daily')?.classList.toggle('active', dailyWorkspaceMode === 'active');
@@ -2721,8 +2715,11 @@ function renderCurrentDailyCampaign() {
 
 function renderDailyPillars() {
   const grid = $('#dc-pillars-grid');
-  if (!grid) return;
   const pillars = currentCampaign?.pillars || [];
+  if ($('#dc-active-pillars-count')) {
+    $('#dc-active-pillars-count').textContent = `${selectedPillarIds.length}/${pillars.length}`;
+  }
+  if (!grid) return;
   if (!pillars.length) {
     grid.innerHTML = `<div class="muted" style="grid-column:1/-1;padding:18px;text-align:center">Chưa có tuyến nội dung phễu. Hãy bấm <b>🧠 Bước 1: Gọi AI đọc SP & Đề xuất Tuyến Phễu</b> ở phía trên!</div>`;
     return;
@@ -2756,24 +2753,32 @@ function formatPostTypeLabel(postType) {
   return '🟩 Dạng 3: Content Text (Hook – Body – CTA) + 1 Ảnh minh họa';
 }
 
+function updateDailyBadges() {
+  const allPosts = currentCampaign?.posts || [];
+  const historyPosts = currentCampaign?.historyPosts || [];
+  if ($('#dc-ws-active-count')) $('#dc-ws-active-count').textContent = `${allPosts.length} bài mới`;
+  if ($('#dc-ws-history-count')) $('#dc-ws-history-count').textContent = `${historyPosts.length} bài đã đăng`;
+  if ($('#nav-daily-active-badge')) $('#nav-daily-active-badge').textContent = String(allPosts.length);
+  if ($('#nav-daily-history-badge')) $('#nav-daily-history-badge').textContent = String(historyPosts.length);
+  if ($('#side-history-count')) $('#side-history-count').textContent = String(historyPosts.length);
+}
+
 function renderDailyPostsList() {
   const listEl = $('#dc-posts-list');
   const statsEl = $('#dc-posts-stats');
+  updateDailyBadges();
   if (!listEl) return;
+
   const allPosts = currentCampaign?.posts || [];
   const historyPosts = currentCampaign?.historyPosts || [];
   const selectedCount = allPosts.filter((p) => p.selected !== false).length;
   const contentReadyCount = allPosts.filter((p) => p.caption || (p.comments && p.comments.length)).length;
   const imgReadyCount = allPosts.filter((p) => p.postType !== 'text_comment' && p.images?.length).length;
 
-  if ($('#dc-ws-active-count')) $('#dc-ws-active-count').textContent = `${allPosts.length} bài mới`;
-  if ($('#dc-ws-history-count')) $('#dc-ws-history-count').textContent = `${historyPosts.length} bài đã đăng/lên lịch`;
-  if ($('#nav-daily-history-badge')) $('#nav-daily-history-badge').textContent = String(historyPosts.length);
-
   if (statsEl) {
     statsEl.innerHTML = allPosts.length
-      ? `Đang chuẩn bị <b>${allPosts.length} bài mới</b> chờ lên lịch (Đang chọn: <b>${selectedCount}</b> · Đã có Content: <b>${contentReadyCount}</b> · Đã làm Ảnh Dạng 2 & 3: <b>${imgReadyCount}</b>) · Những bài đã đăng/lên lịch trên Meta (<b>${historyPosts.length} bài</b>) đã được đẩy sang tab <b>🕘 Lịch sử Content</b>.`
-      : `Tất cả bài đã được đẩy sang phần <b>🕘 Lịch sử Content (${historyPosts.length} bài)</b> — hãy bấm <b>✨ Bước 2: Đề xuất 3 Bài theo 3 Dạng</b> để tạo 3 bài mới chuẩn bị lên lịch!`;
+      ? `Đang có <b>${allPosts.length} bài mới</b> chờ lên lịch (Đang chọn: <b>${selectedCount}</b> · Đã xong Content: <b>${contentReadyCount}/${allPosts.length}</b> · Đã có Ảnh: <b>${imgReadyCount}</b>) — Sau khi bấm Lên lịch/Đăng ngay, bài sẽ tự động chuyển sang <b>🕘 Lịch sử Content (${historyPosts.length} bài)</b>.`
+      : `Hiện không có bài nào đang chờ lên lịch (Đã lưu <b>${historyPosts.length} bài</b> trong <b>🕘 Lịch sử Content</b>). Hãy bấm nút tạo 3 bài mới bên dưới!`;
   }
 
   const filtered = allPosts.filter((p) => {
@@ -2783,7 +2788,25 @@ function renderDailyPostsList() {
   });
 
   if (!filtered.length) {
-    listEl.innerHTML = `<div class="muted" style="text-align:center;padding:28px;border:1px dashed var(--line);border-radius:12px">Không có bài đăng nào trong bộ lọc này. Hãy bấm <b>✨ Bước 2: Đề xuất 3 Bài theo 3 Dạng</b>!</div>`;
+    listEl.innerHTML = `
+      <div class="dc-empty-state">
+        <div style="font-size:36px;margin-bottom:8px">✨</div>
+        <h3 style="font-size:17px;color:var(--ink);margin-bottom:6px">
+          ${allPosts.length === 0
+            ? `Sẵn sàng tạo 3 bài viết mới cho ngày tiếp theo!`
+            : `Không có bài nào trong bộ lọc hiện tại`}
+        </h3>
+        <p class="muted" style="max-width:620px;margin:0 auto 16px;font-size:13.5px;line-height:1.55">
+          ${allPosts.length === 0
+            ? `Toàn bộ <b>${historyPosts.length} bài Content đã đăng / lên lịch trên Meta</b> trước đó đã được cất gọn vào phần <b>🕘 Lịch sử Content</b> để không làm rối danh sách hàng ngày của bạn.`
+            : `Hãy chuyển bộ lọc về "Tất cả bài mới" hoặc tạo 3 bài mới.`}
+        </p>
+        <div class="row" style="justify-content:center;gap:10px;margin-top:0">
+          <button type="button" class="primary big" data-dc-empty-act="propose">✨ Bước 1: AI Đề Xuất 3 Bài Mới Ngay</button>
+          <button type="button" class="small" data-dc-empty-act="history" style="padding:10px 16px;font-weight:700">🕘 Xem Lịch Sử Đã Đăng (${historyPosts.length} bài)</button>
+          <button type="button" class="small" data-dc-empty-act="samples" style="padding:10px 14px">↺ Nạp 3 Bài Mẫu Chuẩn</button>
+        </div>
+      </div>`;
     return;
   }
 
@@ -2794,96 +2817,111 @@ function renderDailyPostsList() {
     const isContentImage = p.postType === 'content_image';
     const targetWords = p.funnel === 'BOFU' ? '120–200 chữ' : '180–350 chữ';
 
-    const stBadge = p.status === 'published'
-      ? '<span class="badge ok">✓ Đã đăng Fanpage</span>'
-      : p.status === 'scheduled'
-        ? `<span class="badge scheduled">📅 Đã hẹn giờ (${esc(p.date)} ${esc(p.scheduledTime || '08:00')})</span>`
-        : (!isTextComment && p.images?.length)
-          ? `<span class="badge ok">🎨 Đã có Content & ${p.images.length} Ảnh</span>`
-          : (p.caption || p.comments?.length)
-            ? `<span class="badge running">✍️ ${isTextComment ? 'Đã có Hook & 4 Comment' : isTextCards ? `Đã có Hook & ${(p.cards || []).length} mục ảnh` : 'Đã viết Content'}</span>`
-            : '<span class="badge">💡 Đề xuất tiêu đề</span>';
+    const hasContent = Boolean(
+      isTextComment
+        ? (p.title && Array.isArray(p.comments) && p.comments.filter(Boolean).length >= 4)
+        : isTextCards
+          ? (p.title && Array.isArray(p.cards) && p.cards.length >= 2)
+          : (p.caption && p.caption.trim().length > 40)
+    );
+    const hasImages = isTextComment ? true : Boolean(Array.isArray(p.images) && p.images.length > 0);
+
+    const fmtTitle = isTextComment
+      ? `🟪 BÀI #${idx + 1} · DẠNG 1: BÀI TEXT NỀN + 4 COMMENT (KHÔNG ẢNH)`
+      : isTextCards
+        ? `🟧 BÀI #${idx + 1} · DẠNG 2: TEXT NỀN + BỘ ${(p.cards || []).length || p.cardCount || 5} ẢNH (SKILL META)`
+        : `🟩 BÀI #${idx + 1} · DẠNG 3: CONTENT TEXT (HOOK – BODY – CTA) + 1 ẢNH MINH HỌA`;
+
+    const fmtSub = isTextComment
+      ? 'Cách đăng Meta: Chọn phông nền màu + Đăng đúng 1 câu Hook + Tự động thả 4 Comment diễn giải'
+      : isTextCards
+        ? 'Cách đăng Meta: Gọi Skill "Meta: Đăng Text nền + bộ ảnh" (Câu Hook nền đen + Bộ ảnh vuông 1:1)'
+        : 'Cách đăng Meta: Đăng bài viết hoàn chỉnh Hook – Body – CTA kèm 1 ảnh minh họa vuông 1:1';
 
     return `
       <div class="dc-post-card ${isSel ? 'is-selected' : ''}" data-post-id="${esc(p.id)}">
-        <div class="dc-post-head">
-          <div class="row" style="margin:0;align-items:center;gap:8px">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:800">
+        <!-- Thanh tiêu đề màu nhận diện rõ từng Dạng bài & Tiến độ 3 bước -->
+        <div class="dc-fmt-banner fmt-${esc(p.postType)}">
+          <div>
+            <div style="font-weight:800;font-size:14px">${fmtTitle}</div>
+            <div style="font-size:12px;opacity:0.88;margin-top:2px">${fmtSub}</div>
+          </div>
+          <div class="dc-mini-steps">
+            <span class="dc-mini-step ${hasContent ? 'done' : 'wait'}">${hasContent ? '✓ 1. Đã có Content' : '⏳ 1. Chờ viết Content'}</span>
+            ${!isTextComment ? `<span class="dc-mini-step ${hasImages ? 'done' : 'wait'}">${hasImages ? `✓ 2. Đã có ${p.images.length} Ảnh` : '⏳ 2. Chờ tạo Ảnh'}</span>` : '<span class="dc-mini-step done">✓ 2. Không dùng ảnh</span>'}
+            <span class="dc-mini-step wait">📅 3. Sẵn sàng lên lịch Meta</span>
+          </div>
+        </div>
+
+        <!-- Thanh thiết lập Ngày giờ hẹn đăng & Phễu -->
+        <div class="dc-schedule-bar">
+          <div class="row" style="margin:0;align-items:center;gap:12px;flex-wrap:wrap">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:800;color:var(--ink)">
               <input type="checkbox" data-dc-field="selected" ${isSel ? 'checked' : ''} style="width:auto">
-              <span>Bài #${idx + 1}</span>
+              <span>Chọn bài này</span>
             </label>
-            <input type="date" data-dc-field="date" value="${esc(p.date || '')}" style="width:142px;padding:4px 8px;font-size:12.5px">
-            <input type="time" data-dc-field="scheduledTime" value="${esc(p.scheduledTime || '08:00')}" style="width:108px;padding:4px 8px;font-size:12.5px">
-            <select data-dc-field="funnel" style="width:auto;padding:4px 8px;font-size:12px;font-weight:700">
-              <option value="TOFU" ${p.funnel === 'TOFU' ? 'selected' : ''}>TOFU</option>
-              <option value="MOFU" ${p.funnel === 'MOFU' ? 'selected' : ''}>MOFU</option>
-              <option value="BOFU" ${p.funnel === 'BOFU' ? 'selected' : ''}>BOFU</option>
-            </select>
-            <select data-dc-field="postType" style="width:auto;padding:4px 8px;font-size:12px;font-weight:700">
-              <option value="text_comment" ${isTextComment ? 'selected' : ''}>🟪 Dạng 1: Bài Text nền + Comment (Không ảnh)</option>
-              <option value="text_cards" ${isTextCards ? 'selected' : ''}>🟧 Dạng 2: Text nền + Bộ ảnh theo tiêu đề</option>
-              <option value="content_image" ${isContentImage ? 'selected' : ''}>🟩 Dạng 3: Content Text + 1 Ảnh minh họa</option>
-            </select>
+            <label class="dc-field-inline">📅 Ngày đăng:
+              <input type="date" data-dc-field="date" value="${esc(p.date || '')}">
+            </label>
+            <label class="dc-field-inline">⏰ Giờ hẹn:
+              <input type="time" data-dc-field="scheduledTime" value="${esc(p.scheduledTime || '08:00')}">
+            </label>
+            <label class="dc-field-inline">🎯 Tầng phễu:
+              <select data-dc-field="funnel">
+                <option value="TOFU" ${p.funnel === 'TOFU' ? 'selected' : ''}>TOFU (Nhận diện)</option>
+                <option value="MOFU" ${p.funnel === 'MOFU' ? 'selected' : ''}>MOFU (Niềm tin)</option>
+                <option value="BOFU" ${p.funnel === 'BOFU' ? 'selected' : ''}>BOFU (Chuyển đổi)</option>
+              </select>
+            </label>
+            <label class="dc-field-inline">📐 Đổi dạng:
+              <select data-dc-field="postType">
+                <option value="text_comment" ${isTextComment ? 'selected' : ''}>🟪 Dạng 1: Text nền + 4 Comment</option>
+                <option value="text_cards" ${isTextCards ? 'selected' : ''}>🟧 Dạng 2: Text nền + Bộ ảnh</option>
+                <option value="content_image" ${isContentImage ? 'selected' : ''}>🟩 Dạng 3: Content + 1 Ảnh</option>
+              </select>
+            </label>
             <span class="badge">${esc(p.pillarName || p.pillarId || 'Tuyến phễu')}</span>
           </div>
           <div class="row" style="margin:0;align-items:center;gap:6px">
             ${p.aiBadge ? `<span class="badge cl-pill" style="font-size:11px">${esc(p.aiBadge)}</span>` : ''}
-            ${stBadge}
-            <button type="button" class="small danger" data-dc-act="delete" title="Xoá bài này">🗑</button>
+            <button type="button" class="small danger" data-dc-act="delete" title="Xoá bài này khỏi danh sách chuẩn bị">🗑 Xoá</button>
           </div>
         </div>
 
-        <!-- Câu Hook / Tiêu đề bài đăng -->
+        <!-- Câu Hook / Tiêu đề chính -->
         <div class="grid-form" style="margin-top:10px">
           <label class="full" style="margin:0">
-            <div class="row" style="margin:0 0 4px;justify-content:space-between">
-              <span style="font-size:12.5px;font-weight:800;color:var(--ink)">
+            <div class="row" style="margin:0 0 5px;justify-content:space-between;align-items:center">
+              <span style="font-size:13px;font-weight:800;color:var(--ink)">
                 📌 ${isTextComment
-                  ? 'Câu Hook đăng Bài Text nền Facebook (Chỉ đăng đúng 1 câu này kèm chọn màu nền, KHÔNG viết nội dung đi cùng tiêu đề):'
+                  ? 'Câu Hook đăng trên Phông nền màu Facebook (Chỉ đăng đúng 1 câu này ở bài chính):'
                   : isTextCards
-                    ? 'Câu Hook tiêu đề đăng kèm Bộ ảnh (Chỉ đăng câu Hook này + bộ ảnh giải thích bên dưới):'
-                    : 'Câu Hook mở đầu bài viết (Đặt nguyên văn ở dòng đầu tiên trước nút “Xem thêm”):'}
+                    ? 'Câu Hook tiêu đề có con số (Đăng trên phông nền đen kèm Bộ ảnh giải thích bên dưới):'
+                    : 'Tiêu đề / Câu Hook mở đầu bài viết (Đặt ở dòng đầu tiên trước nút “Xem thêm”):'}
               </span>
               ${isContentImage ? `
-                <label style="margin:0;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px;cursor:pointer">
+                <label style="margin:0;font-size:12px;font-weight:700;color:#047857;display:flex;align-items:center;gap:5px;cursor:pointer">
                   <input type="checkbox" data-dc-field="includeProduct" ${p.includeProduct ? 'checked' : ''} style="width:auto">
-                  <span>📦 Ghép hộp đứng & lọ sản phẩm Bổ Thận FT tách nền vào ảnh</span>
-                </label>` : isTextComment ? `
-                <span class="badge" style="background:#f3e8ff;color:#6b21a8;border-color:#d8b4fe">🟪 Đăng Text nền Facebook — Nội dung diễn giải ở 4 Comment</span>` : `
-                <span class="badge" style="background:#ffedd5;color:#9a3412;border-color:#fdba74">🟧 Câu Hook + Bộ ${(p.cards || []).length || p.cardCount || 5} ảnh giải thích từng mục</span>`}
+                  <span>📦 Ghép sản phẩm Bổ Thận FT vào góc ảnh</span>
+                </label>` : ''}
             </div>
             <input data-dc-field="title" value="${esc(p.title || '')}" style="font-weight:700;font-size:14.5px;color:#1e1b4b">
           </label>
         </div>
 
-        <!-- Thanh nút hành động -->
-        <div class="row" style="margin-top:10px;justify-content:space-between;align-items:center;background:#f8fafc;padding:8px 12px;border-radius:10px;border:1px solid var(--line)">
-          <div class="row" style="margin:0;gap:8px">
-            <button type="button" class="small primary" data-dc-act="write">✍️ Bước 3: ${isTextComment ? 'Viết 4 Comment diễn giải Hook' : isTextCards ? 'Lập danh sách mục cho Bộ ảnh' : 'Viết Content (Hook – Body – CTA)'}</button>
-            ${!isTextComment ? `<button type="button" class="small viral-btn" data-dc-act="render">🎨 Bước 4: Làm ${isTextCards ? `Bộ ${(p.cards || []).length || p.cardCount || 5} Ảnh` : '1 Ảnh Minh Họa'}</button>` : ''}
-            <button type="button" class="small" data-dc-act="save-edit">💾 Lưu chỉnh sửa</button>
-          </div>
-          <div class="row" style="margin:0;gap:6px">
-            ${p.fbPermalink ? `<a href="${esc(p.fbPermalink)}" target="_blank" rel="noopener" class="badge ok">🔗 Xem bài trên FB</a>` : ''}
-            <button type="button" class="small primary" data-dc-act="schedule">📅 Hẹn giờ đăng Fanpage</button>
-            <button type="button" class="small" data-dc-act="publish">🚀 Đăng ngay</button>
-            <button type="button" class="small" data-dc-act="draft">📝 Lưu nháp FB</button>
-          </div>
-        </div>
-
-        <!-- Khung làm việc riêng biệt theo từng Dạng bài -->
+        <!-- Khung làm việc chi tiết theo từng Dạng bài -->
         <div class="dc-work-grid" style="${isTextComment ? 'grid-template-columns: 1fr;' : ''}">
           <div>
             ${isTextComment ? `
               <!-- DẠNG 1: Bài chính chỉ 1 câu Hook trên phông màu nền + 4 Comment bên dưới -->
-              <div style="background:linear-gradient(135deg,#4c1d95,#6d28d9);color:#fff;padding:18px 22px;border-radius:12px;text-align:center;font-weight:800;font-size:17px;line-height:1.4;margin-bottom:12px;box-shadow:0 4px 14px rgba(109,40,217,0.18)">
+              <div style="background:linear-gradient(135deg,#311042,#581c87);color:#fff;padding:16px 20px;border-radius:12px;text-align:center;font-weight:800;font-size:16.5px;line-height:1.4;margin-bottom:12px;box-shadow:0 4px 14px rgba(88,28,135,0.18)">
                 “${esc(p.title || '')}”
-                <div style="font-size:11.5px;font-weight:500;opacity:0.85;margin-top:6px">↑ Bài chính đăng trạng thái Text chọn màu nền trên Facebook (Chỉ có câu Hook này, KHÔNG viết kèm nội dung content)</div>
+                <div style="font-size:11.5px;font-weight:500;opacity:0.85;margin-top:5px">↑ Xem trước hiển thị Bài Text nền trên Facebook</div>
               </div>
               <input type="hidden" data-dc-field="caption" value="${esc(p.title || '')}">
               <div>
                 <div class="row" style="margin:0 0 8px;justify-content:space-between;align-items:center">
-                  <b style="font-size:13px;color:#5b21b6">💬 4 Comment diễn giải câu Hook thả dưới bài đăng:</b>
+                  <b style="font-size:13px;color:#5b21b6">💬 Nội dung 4 Comment tự động thả dưới bài đăng:</b>
                   <div class="row" style="margin:0;gap:6px">
                     <span class="badge">📏 ${p.wordCount || 0} chữ</span>
                     <span class="badge">😊 ${p.emojiCount || 0}/15 emoji</span>
@@ -2892,45 +2930,44 @@ function renderDailyPostsList() {
                 <div class="dc-comments-box" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
                   ${[0, 1, 2, 3].map((ci) => `
                     <div class="dc-comment-item">
-                      <span class="dc-comment-num">Comment ${ci + 1}</span>
-                      <textarea data-dc-comment-idx="${ci}" rows="5" placeholder="Nội dung Comment ${ci + 1} diễn giải câu Hook..." style="font-size:13px;line-height:1.5">${esc(p.comments?.[ci] || '')}</textarea>
+                      <span class="dc-comment-num">Cmt ${ci + 1}</span>
+                      <textarea data-dc-comment-idx="${ci}" rows="4" placeholder="Nội dung Comment ${ci + 1} diễn giải câu Hook..." style="font-size:13px;line-height:1.5">${esc(p.comments?.[ci] || '')}</textarea>
                     </div>`).join('')}
                 </div>
               </div>
             ` : isTextCards ? `
               <!-- DẠNG 2: Câu Hook + Bộ ảnh chia sẻ từng mục -->
-              <div style="background:#fff7ed;border:1.5px solid #fdba74;color:#7c2d12;padding:12px 16px;border-radius:10px;margin-bottom:10px;font-size:13px;line-height:1.45">
-                <b>🟧 Phần chữ đăng Facebook (Chỉ gồm câu Hook):</b><br>
-                <span style="font-size:14.5px;font-weight:800;color:#431407">“${esc(p.title || '')}”</span>
-                <div class="muted" style="font-size:11.5px;margin-top:4px">Phần giải thích nằm trọn trong <b>bộ ${(p.cards || []).length || p.cardCount || 5} ảnh vuông 1:1</b> đi kèm bên dưới (mỗi ảnh: nền kem + tiêu đề ngắn 3–6 chữ font Serif nâu đậm + ảnh chụp chân thực người đàn ông Việt 40–65 tuổi).</div>
+              <div style="background:#18181b;color:#fff;padding:14px 18px;border-radius:10px;margin-bottom:10px;text-align:center">
+                <div style="font-size:15px;font-weight:800">“${esc(p.title || '')}”</div>
+                <div style="font-size:11.5px;opacity:0.8;margin-top:4px">↑ Bài chính đăng Text nền đen trên Meta · Kèm bộ ${(p.cards || []).length || p.cardCount || 5} ảnh vuông 1:1 bên phải</div>
               </div>
               <input type="hidden" data-dc-field="caption" value="${esc(p.title || '')}">
               <div>
-                <b style="font-size:12.8px;color:#c2410c">🗂️ Danh sách ${(p.cards || []).length} bức ảnh giải thích cho câu Hook (Mỗi dòng là tiêu đề ngắn 3–6 chữ in trên nền kem đầu ảnh):</b>
+                <b style="font-size:12.8px;color:#c2410c">🗂️ Nội dung ${(p.cards || []).length} bức ảnh trong Bộ ảnh (Tiêu đề ngắn 3–6 chữ in trên đầu mỗi ảnh):</b>
                 <div class="dc-cards-editor" style="margin-top:6px;display:grid;gap:8px">
                   ${(p.cards || []).map((c, ci) => `
                     <div class="dc-card-edit-row" data-dc-card-idx="${ci}" style="padding:8px 10px;background:#fff;border:1px solid var(--line);border-radius:8px">
                       <div class="row" style="margin:0;gap:8px;align-items:center">
                         <span class="badge scheduled" style="min-width:58px;text-align:center">Ảnh ${ci + 1}</span>
-                        <input data-dc-card-title="${ci}" value="${esc(c.cardTitle || '')}" placeholder="Tiêu đề ngắn 3–6 chữ (VD: Uống nhiều rượu bia)" style="flex:1;padding:6px 10px;font-weight:700;font-size:13.5px;color:#5B240B">
+                        <input data-dc-card-title="${ci}" value="${esc(c.cardTitle || '')}" placeholder="Tiêu đề ngắn 3–6 chữ" style="flex:1;padding:6px 10px;font-weight:700;font-size:13.5px;color:#5B240B">
                         <input type="hidden" data-dc-card-scenekey="${ci}" value="${esc(c.sceneKey || '')}">
                       </div>
-                      <input data-dc-card-scenehint="${ci}" value="${esc(c.sceneHint || '')}" placeholder="Mô tả cảnh ảnh người đàn ông Việt 40–65 tuổi..." style="margin-top:5px;width:100%;padding:4px 8px;font-size:12px;color:var(--muted);border:1px dashed var(--line)">
+                      <input data-dc-card-scenehint="${ci}" value="${esc(c.sceneHint || '')}" placeholder="Mô tả cảnh người đàn ông Việt 40–65 tuổi..." style="margin-top:5px;width:100%;padding:4px 8px;font-size:12px;color:var(--muted);border:1px dashed var(--line)">
                     </div>`).join('')}
                 </div>
               </div>
             ` : `
               <!-- DẠNG 3: Content Text (Hook - Body - CTA) + 1 Ảnh minh họa -->
               <div class="row" style="margin:0 0 6px;justify-content:space-between;align-items:center">
-                <b style="font-size:13px;color:#065f46">📝 Nội dung bài viết đầy đủ (Hook – Body – CTA · Đi kèm 1 ảnh minh họa):</b>
+                <b style="font-size:13px;color:#065f46">📝 Nội dung bài viết đầy đủ (Hook – Body – CTA):</b>
                 <div class="row" style="margin:0;gap:6px">
                   <span class="badge" title="Độ dài chuẩn ${esc(targetWords)}">📏 ${p.wordCount || 0} chữ</span>
                   <span class="badge" title="Tối đa 15 emoji">😊 ${p.emojiCount || 0}/15 emoji</span>
                 </div>
               </div>
-              <textarea data-dc-field="caption" rows="12" placeholder="Bấm '✍️ Bước 3: Viết Content (Hook – Body – CTA)' để AI viết bài hoàn chỉnh..." style="font-size:13.5px;line-height:1.58">${esc(p.caption || '')}</textarea>
+              <textarea data-dc-field="caption" rows="11" placeholder="Bấm '✍️ Viết lại Content bằng AI' để AI viết bài hoàn chỉnh..." style="font-size:13.5px;line-height:1.58">${esc(p.caption || '')}</textarea>
               <div style="margin-top:8px">
-                <b style="font-size:12.5px;color:#047857">🖼️ Tiêu đề ngắn (3–6 chữ) in trên dải nền kem của 1 Ảnh minh họa đi kèm:</b>
+                <b style="font-size:12.5px;color:#047857">🖼️ Dòng chữ tiêu đề ngắn (3–6 chữ) in trên 1 Ảnh minh họa đi kèm:</b>
                 <input data-dc-field="imageHeadline" value="${esc(p.imageHeadline || p.title || '')}" placeholder="VD: Đếm số đêm ngủ trọn giấc" style="margin-top:4px;font-weight:700;font-size:13.5px;color:#5B240B">
               </div>
             `}
@@ -2940,7 +2977,7 @@ function renderDailyPostsList() {
             <!-- Cột phải: Ảnh Minh Họa đã tạo (Cho Dạng 2 & Dạng 3) -->
             <div>
               <div class="row" style="margin:0 0 6px;justify-content:space-between;align-items:center">
-                <b style="font-size:13px">🎨 ${isTextCards ? `Bộ ${(p.images || []).length || (p.cards || []).length || 5} Ảnh giải thích cho câu Hook` : '1 Ảnh minh họa đi kèm bài viết'} (1080×1080)</b>
+                <b style="font-size:13px">🎨 ${isTextCards ? `Bộ ${(p.images || []).length || (p.cards || []).length || 5} Ảnh minh họa (1080×1080)` : '1 Ảnh minh họa bài viết (1080×1080)'}</b>
               </div>
               ${(p.images || []).length ? `
                 <div class="dc-image-gallery">
@@ -2950,15 +2987,31 @@ function renderDailyPostsList() {
                         <img src="${esc(im.url)}?t=${Date.now()}" alt="Ảnh ${ii + 1}" loading="lazy">
                       </a>
                       <div class="dc-img-meta">
-                        <span>Ảnh #${ii + 1} (${im.width}×${im.height})</span>
+                        <span>Ảnh #${ii + 1}</span>
                         <a href="${esc(im.url)}" download="${esc(im.file || `post-${ii + 1}.jpg`)}">⬇ Tải</a>
                       </div>
                     </div>`).join('')}
                 </div>` : `
                 <div class="muted" style="border:1.5px dashed var(--line);border-radius:12px;padding:32px 16px;text-align:center;font-size:13px">
-                  Chưa tạo ảnh cho bài này.<br>Bấm <b>🎨 Bước 4: Làm Ảnh</b> để tạo ${isTextCards ? 'bộ ảnh giải thích từng mục theo tiêu đề' : '1 ảnh minh họa cho bài viết'} (nền kem + chữ Serif nâu đậm + ảnh người Việt 40–65 tuổi)!
+                  Chưa có ảnh cho bài này.<br>Bấm nút <b>🎨 Tạo Ảnh Minh Họa</b> bên dưới để hệ thống thiết kế tự động!
                 </div>`}
             </div>` : ''}
+        </div>
+
+        <!-- Thanh Hành Động Cuối Thẻ: Bên trái = Chỉnh sửa Content/Ảnh · Bên phải = Đăng / Lên lịch Meta -->
+        <div class="dc-action-bar">
+          <div class="row" style="margin:0;gap:8px;align-items:center">
+            <span class="muted" style="font-size:12px;font-weight:700">Bước 2 (Soạn & Làm ảnh):</span>
+            <button type="button" class="small" data-dc-act="write">✍️ ${isTextComment ? 'AI Viết lại 4 Comment' : isTextCards ? 'AI Lập lại mục Bộ ảnh' : 'AI Viết lại Content'}</button>
+            ${!isTextComment ? `<button type="button" class="small viral-btn" data-dc-act="render">🎨 ${hasImages ? 'Tạo lại Ảnh' : 'Tạo Ảnh Minh Họa'}</button>` : ''}
+            <button type="button" class="small" data-dc-act="save-edit">💾 Lưu chỉnh sửa</button>
+          </div>
+          <div class="row" style="margin:0;gap:8px;align-items:center">
+            <span style="font-size:12px;font-weight:800;color:#065f46">Bước 3 (Đẩy lên Meta):</span>
+            <button type="button" class="btn-meta-schedule small" data-dc-act="schedule" style="padding:7px 14px;font-size:13px">📅 Hẹn giờ đăng Fanpage</button>
+            <button type="button" class="primary small" data-dc-act="publish" style="padding:7px 14px;font-size:13px">🚀 Đăng ngay</button>
+            <button type="button" class="small" data-dc-act="draft" title="Lưu bản nháp trên Fanpage">📝 Lưu nháp</button>
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -2969,8 +3022,7 @@ function renderDailyHistoryList() {
   const statsEl = $('#dc-history-stats');
   if (!listEl) return;
   const historyPosts = currentCampaign?.historyPosts || [];
-  if ($('#dc-ws-history-count')) $('#dc-ws-history-count').textContent = `${historyPosts.length} bài đã đăng/lên lịch`;
-  if ($('#nav-daily-history-badge')) $('#nav-daily-history-badge').textContent = String(historyPosts.length);
+  updateDailyBadges();
 
   const pubCount = historyPosts.filter((p) => p.status === 'published').length;
   const schedCount = historyPosts.filter((p) => p.status === 'scheduled').length;
@@ -3122,17 +3174,35 @@ $('#btn-dc-ws-active')?.addEventListener('click', () => setDailyWorkspaceMode('a
 $('#btn-dc-ws-history')?.addEventListener('click', () => setDailyWorkspaceMode('history'));
 $('#btn-dc-back-to-active')?.addEventListener('click', () => setDailyWorkspaceMode('active'));
 
+function syncConfigBtnStates() {
+  $('#btn-daily-toggle-profile')?.classList.toggle('is-open', !$('#daily-profile-card')?.hidden);
+  $('#btn-daily-toggle-pillars')?.classList.toggle('is-open', !$('#daily-pillars-card')?.hidden);
+  $('#btn-daily-toggle-rules')?.classList.toggle('is-open', !$('#daily-rules-card')?.hidden);
+}
+
 $('#btn-daily-toggle-rules')?.addEventListener('click', () => {
   const box = $('#daily-rules-card');
-  if (box) box.hidden = !box.hidden;
+  if (box) { box.hidden = !box.hidden; syncConfigBtnStates(); }
 });
 $('#btn-daily-close-rules')?.addEventListener('click', () => {
   const box = $('#daily-rules-card');
-  if (box) box.hidden = true;
+  if (box) { box.hidden = true; syncConfigBtnStates(); }
 });
 $('#btn-daily-toggle-profile')?.addEventListener('click', () => {
   const box = $('#daily-profile-card');
-  if (box) box.hidden = !box.hidden;
+  if (box) { box.hidden = !box.hidden; syncConfigBtnStates(); }
+});
+$('#btn-daily-close-profile')?.addEventListener('click', () => {
+  const box = $('#daily-profile-card');
+  if (box) { box.hidden = true; syncConfigBtnStates(); }
+});
+$('#btn-daily-toggle-pillars')?.addEventListener('click', () => {
+  const box = $('#daily-pillars-card');
+  if (box) { box.hidden = !box.hidden; syncConfigBtnStates(); }
+});
+$('#btn-daily-close-pillars')?.addEventListener('click', () => {
+  const box = $('#daily-pillars-card');
+  if (box) { box.hidden = true; syncConfigBtnStates(); }
 });
 
 $('#daily-campaign-select')?.addEventListener('change', (e) => {
@@ -3388,6 +3458,14 @@ function collectPostCardPatch(cardEl) {
 
 // Thao tác trên từng bài đăng trong #dc-posts-list
 $('#dc-posts-list')?.addEventListener('click', async (e) => {
+  const emptyBtn = e.target.closest('button[data-dc-empty-act]');
+  if (emptyBtn) {
+    const eAct = emptyBtn.dataset.dcEmptyAct;
+    if (eAct === 'propose') $('#btn-daily-propose-titles')?.click();
+    else if (eAct === 'history') setDailyWorkspaceMode('history');
+    else if (eAct === 'samples') $('#btn-daily-reset-samples')?.click();
+    return;
+  }
   const btn = e.target.closest('button[data-dc-act]');
   if (!btn || !currentCampaign) return;
   const cardEl = btn.closest('[data-post-id]');
@@ -3617,10 +3695,8 @@ $('#btn-daily-batch-schedule')?.addEventListener('click', async (e) => {
   loadClaude(); // không chờ: kiểm tra tài khoản Claude mất vài giây
   durHint();
   await loadList();
-  // Người dùng đã tự chuyển tab trong lúc trang đang tải → không tự mở video đầu tiên đè lên.
+  // Mở mặc định vào không gian làm việc chính: Content Hàng Ngày
   if (!$('#view-posts').hidden || !$('#view-accounts').hidden || !$('#view-skills').hidden || !$('#view-daily').hidden || currentId) return;
-  const first = $('#job-list li[data-id]');
-  if (first) openJob(first.dataset.id);
-  else show('new');
+  openDailyView('active');
 })();
 
